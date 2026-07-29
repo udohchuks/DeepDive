@@ -37,14 +37,14 @@ export class SubmissionOrchestrator {
   }
 
   async executeReviewRound(): Promise<PipelineExecutionResult> {
-    const { projectId, phaseId, rubric, roundRepository, clock, idGenerator, testResult } = this.options;
+    const { projectId, phaseId, rubric, roundRepository, clock, idGenerator, testResult, artifactPayload } = this.options;
 
     // 1. Get prior rounds for round index calculation
     const priorRounds = roundRepository.getRounds(projectId);
     const roundNumber = priorRounds.length + 1;
 
     // 2. Deterministic Gate Check (D-1)
-    const detGateResult = evaluateDeterministicGate(rubric, testResult, () => idGenerator.generate());
+    const detGateResult = evaluateDeterministicGate(rubric, testResult, () => idGenerator.generate(), artifactPayload);
     if (!detGateResult.passed) {
       // Short-circuit to revise without calling model provider Grader!
       const roundRecord: RoundRecord = {

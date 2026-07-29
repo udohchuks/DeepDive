@@ -16,6 +16,32 @@ export class MissingApiKeyError extends Error {
 }
 
 export const PINNED_CLAUDE_MODEL = 'claude-3-5-sonnet-20241022'; // Pinned version (D-5)
+export const PINNED_DEEPSEEK_MODEL = 'deepseek-chat'; // Pinned DeepSeek model version
+export const PINNED_OPENROUTER_MODEL = 'anthropic/claude-3.5-sonnet'; // Pinned OpenRouter model slug
+
+export class UnpinnedModelError extends Error {
+  constructor(model: string) {
+    super(
+      `Model "${model}" is a moving alias. Grading must be reproducible (D-5), so pin an explicit dated or versioned model id instead.`,
+    );
+    this.name = 'UnpinnedModelError';
+  }
+}
+
+/**
+ * Rejects moving aliases such as "-latest".
+ *
+ * An alias silently changes the grader underneath the student between one
+ * submission and the next, which is exactly what D-5 exists to prevent. This
+ * runs on operator-supplied overrides, so the failure is loud at construction
+ * rather than invisible in a verdict.
+ */
+export function assertPinnedModel(model: string): string {
+  if (/latest|\*/i.test(model)) {
+    throw new UnpinnedModelError(model);
+  }
+  return model;
+}
 
 export async function executeStructuredModelCall<T>(
   options: ModelRequestOptions<T>,

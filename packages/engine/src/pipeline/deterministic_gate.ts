@@ -1,18 +1,21 @@
-import { RubricDefinition, Finding, TestRunResult } from '@deepdive/core';
+import { RubricDefinition, Finding, TestRunResult, CryptoIdGenerator } from '@deepdive/core';
+import { runCodeCheck } from '@deepdive/content';
 
 export interface DeterministicGateResult {
   passed: boolean;
   failedFindings: Finding[];
 }
 
+const defaultIdGen = new CryptoIdGenerator();
+
 export function evaluateDeterministicGate(
   rubric: RubricDefinition,
   testResult?: TestRunResult,
   idGenerator?: () => string,
+  artifactPayload?: Record<string, unknown>,
 ): DeterministicGateResult {
   const failedFindings: Finding[] = [];
-  let idCounter = 0;
-  const makeId = idGenerator ?? (() => `123e4567-e89b-12d3-a456-${(++idCounter).toString(16).padStart(12, '0')}`);
+  const makeId = idGenerator ?? (() => defaultIdGen.generate());
 
   // Test failure automatically triggers deterministic gate failure
   if (testResult && !testResult.success) {
@@ -27,7 +30,7 @@ export function evaluateDeterministicGate(
   }
 
   for (const criterion of rubric.criteria) {
-    if (criterion.kind === 'deterministic') {
+    if (criterion.kind === 'deterministic' && criterion.codeCheckName) {
       if (criterion.codeCheckName === 'check_test_pass' || criterion.codeCheckName === 'check_characterization_test_path') {
         if (!testResult || !testResult.success) {
           if (!failedFindings.some((f) => f.targetFieldId === criterion.id)) {
@@ -38,6 +41,35 @@ export function evaluateDeterministicGate(
               targetFieldId: criterion.id,
               failCount: testResult?.totalFailed ?? 1,
               passCount: testResult?.totalPassed ?? 0,
+            });
+          }
+        }
+      } else {
+        // Fail closed: if artifact payload is missing for a code check, record failure
+        if (!artifactPayload) {
+          failedFindings.push({
+            id: makeId(),
+            code: 'BOUND_VIOLATED',
+            severity: 'error',
+            targetFieldId: criterion.id,
+          });
+        } else {
+          try {
+            const checkRes = runCodeCheck(criterion.codeCheckName, artifactPayload);
+            if (!checkRes.passed) {
+              failedFindings.push({
+                id: makeId(),
+                code: 'BOUND_VIOLATED',
+                severity: 'error',
+                targetFieldId: criterion.id,
+              });
+            }
+          } catch {
+            failedFindings.push({
+              id: makeId(),
+              code: 'INVARIANT_VIOLATED',
+              severity: 'error',
+              targetFieldId: criterion.id,
             });
           }
         }

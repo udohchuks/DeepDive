@@ -27,7 +27,7 @@ export class GreenfieldDriver {
       };
     }
 
-    // Increments round count without numeric cap (Unbounded Rounds)
+    // Increments round count without numeric cap (Unbounded Rounds - architecture.md §7)
     const nextState: PhaseState = {
       ...currentState,
       roundCount: currentState.roundCount + 1,

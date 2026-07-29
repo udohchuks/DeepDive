@@ -30,7 +30,7 @@ export class SandboxedTestRunner implements TestRunner {
       command,
       args,
       mountPolicy: {
-        readOnlyPaths: [testDirectory],
+        readOnlyPaths: [],
         readWritePaths: [testDirectory],
         blockedPaths: [],
       },

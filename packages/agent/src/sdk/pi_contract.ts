@@ -16,7 +16,7 @@ export type ToolCallHook = (context: ToolCallHookContext) => ToolCallHookResult 
 export interface AgentSessionOptions {
   tools?: string[];
   excludeTools?: string[];
-  noTools?: 'all' | 'builtin';
+  noTools?: boolean | 'all' | 'builtin';
   customTools?: Record<string, unknown>;
   clock?: Clock;
   idGenerator?: IdGenerator;
@@ -44,9 +44,7 @@ export function createAgentSession(role: string, options: AgentSessionOptions): 
 
   let grantedTools: string[] = [];
 
-  if (options.noTools === 'all') {
-    grantedTools = options.customTools ? Object.keys(options.customTools) : [];
-  } else if (options.noTools === 'builtin') {
+  if (options.noTools === true || options.noTools === 'all' || options.noTools === 'builtin') {
     grantedTools = options.customTools ? Object.keys(options.customTools) : [];
   } else if (options.tools) {
     grantedTools = [...options.tools];

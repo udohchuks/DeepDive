@@ -1,3 +1,11 @@
-export function validatePhaseDArtifact(payload: Record<string, unknown>): boolean {
-  return Boolean(payload.implementedModules && Array.isArray(payload.implementedModules));
+import { z } from 'zod';
+
+export const PhaseDArtifactSchema = z.object({
+  implementedModules: z.array(z.string().min(1)).min(1),
+  testSuitePassed: z.boolean(),
+});
+export type PhaseDArtifact = z.infer<typeof PhaseDArtifactSchema>;
+
+export function validatePhaseDArtifact(payload: unknown): PhaseDArtifact {
+  return PhaseDArtifactSchema.parse(payload);
 }

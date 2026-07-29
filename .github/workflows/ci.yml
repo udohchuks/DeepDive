@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Must match "engines.node" in package.json (D-5, pinned versions).
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+          cache: 'npm'
+
+      # Required for the real out-of-boundary sandbox tests (build.md 2.2).
+      # Without it those tests skip and the isolation guarantee goes unverified.
+      - name: Install bubblewrap
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+
+      - name: Verify bubblewrap is available
+        run: bwrap --version
+
+      - name: Install Dependencies
+        run: npm ci
+
+      # Single entry point (D-8): typecheck, lint, cycles, tests, doc lint.
+      # Kept as one command so CI cannot drift from local verification.
+      - name: Verify
+        run: npm run verify
+
+      - name: Test Coverage Report
+        run: npm run test:coverage

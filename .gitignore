@@ -3,3 +3,14 @@ dist/
 coverage/
 *.log
 .DS_Store
+
+# Secrets — .env.example is the committed template; real .env files never are.
+.env
+.env.*
+!.env.example
+
+# Local SQLite databases (per-project student data)
+data/
+*.db
+*.db-wal
+*.db-shm

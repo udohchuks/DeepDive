@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { ZodError } from 'zod';
 import {
   FindingSchema,
   AcceptedProjectCharterSchema,
@@ -11,6 +12,8 @@ import {
   HintSchema,
   QuizItemSchema,
   CompletionRecordSchema,
+  AllowedModes,
+  validateConfigV1,
 } from '../src/index.js';
 
 describe('Domain Schemas & Serialization (Phase 1.1)', () => {
@@ -220,5 +223,32 @@ describe('Domain Schemas & Serialization (Phase 1.1)', () => {
       contentHash: 'f'.repeat(64),
     };
     expect(CompletionRecordSchema.parse(completionRecord)).toEqual(completionRecord);
+  });
+});
+
+describe('Project config validation (packages/core/domain/config)', () => {
+  const base = { version: 1 as const, projectId: '123e4567-e89b-12d3-a456-426614174010' };
+
+  it('PROTECTED INVARIANT: both learning modes are accepted (project.md §1)', () => {
+    for (const mode of AllowedModes) {
+      expect(validateConfigV1({ ...base, mode })).toEqual({ ...base, mode });
+    }
+    expect(AllowedModes).toContain('greenfield');
+    expect(AllowedModes).toContain('onboarding');
+  });
+
+  it('rejects an unknown mode with a ZodError, not a bare Error', () => {
+    try {
+      validateConfigV1({ ...base, mode: 'freestyle' });
+      throw new Error('expected validation to fail');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ZodError);
+      expect((err as ZodError).issues[0].message).toMatch(/greenfield.*onboarding/);
+    }
+  });
+
+  it('rejects a malformed projectId and a wrong version', () => {
+    expect(() => validateConfigV1({ ...base, projectId: 'not-a-uuid', mode: 'greenfield' })).toThrow(ZodError);
+    expect(() => validateConfigV1({ ...base, version: 2, mode: 'greenfield' })).toThrow(ZodError);
   });
 });

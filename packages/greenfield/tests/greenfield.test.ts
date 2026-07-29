@@ -119,4 +119,16 @@ describe('Greenfield Experience Engine & Drivers (Phase 6)', () => {
     expect(result.transitionOccurred).toBe(true);
     expect(result.nextState.currentPhase).toBe('E');
   });
+
+  it('PROTECTED INVARIANT: GreenfieldDriver Unbounded Rounds — increments round count without cap', () => {
+    const driver = new GreenfieldDriver();
+    let state = driver.createInitialState();
+    expect(state.roundCount).toBe(0);
+
+    for (let i = 1; i <= 25; i++) {
+      state = driver.processSubmissionVerdict(state, false).newState;
+      expect(state.roundCount).toBe(i);
+    }
+    expect(state.roundCount).toBe(25);
+  });
 });

@@ -132,4 +132,11 @@ describe('Submission Pipeline Orchestrator & Deterministic Gate (Phase 5.2)', ()
 
     expect(updatedRound.status).toBe('revise');
   });
+
+  it('evaluateDeterministicGate fails closed when artifactPayload is absent', async () => {
+    const { evaluateDeterministicGate } = await import('../src/pipeline/deterministic_gate.js');
+    const result = evaluateDeterministicGate(SddRubric);
+    expect(result.passed).toBe(false);
+    expect(result.failedFindings).toHaveLength(2); // check_modules_non_empty and check_citations_valid failed
+  });
 });

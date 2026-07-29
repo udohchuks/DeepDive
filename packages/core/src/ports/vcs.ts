@@ -11,6 +11,8 @@ export interface Vcs {
   checkoutCommit(targetPath: string, commitSha: string): Promise<void>;
   createBranch(targetPath: string, branchName: string): Promise<void>;
   getDiff(targetPath: string): Promise<string>;
+  getStatus?(targetPath: string): Promise<string>;
+  getLog?(targetPath: string, maxCount?: number): Promise<string[]>;
   commit(targetPath: string, message: string): Promise<string>;
   createPullRequest(options: PrOptions): Promise<{ prUrl: string; prNumber: number }>;
   getHeadCommitSha(targetPath: string): Promise<string>;
@@ -23,6 +25,8 @@ export class FakeVcs implements Vcs {
   public checkedOutCommits = new Map<string, string>();
   public createdBranches = new Map<string, string>();
   public diffOutput = 'fake diff';
+  public statusOutput = 'clean';
+  public logOutput: string[] = ['fake-commit-sha-12345678901234567890 Initial commit'];
   public defaultHeadCommitSha = '0000000000000000000000000000000000000000';
   public fileExistsAtCommitResult = true;
 
@@ -40,6 +44,14 @@ export class FakeVcs implements Vcs {
 
   async getDiff(_targetPath: string): Promise<string> {
     return this.diffOutput;
+  }
+
+  async getStatus(_targetPath: string): Promise<string> {
+    return this.statusOutput;
+  }
+
+  async getLog(_targetPath: string, _maxCount?: number): Promise<string[]> {
+    return this.logOutput;
   }
 
   async commit(_targetPath: string, _message: string): Promise<string> {
