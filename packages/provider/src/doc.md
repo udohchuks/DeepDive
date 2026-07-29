@@ -34,10 +34,16 @@ const result = await provider.generateStructured({
 ## Constraints & gotchas
 - Missing API keys throw `MissingApiKeyError` without logging or leaking credentials.
 - In test mode, fixture cache misses throw hard errors; no fallback live calls occur.
-- **The provider classes are still wiring, not live integrations.** Every `generateStructured` currently echoes the prompt through `executeStructuredModelCall` rather than issuing an HTTP request. Key resolution, model pinning, validation, and retry semantics are real and tested; the network call is not yet implemented for any provider.
-- Setting `MODEL_PROVIDER` to an unrecognized value silently yields `GenericModelProvider`, which looks for `<NAME>_API_KEY`. Check `KNOWN_PROVIDERS` if a typo is suspected.
+- Model calls are **real**, issued through `@earendil-works/pi-ai` (see `pi_ai_client.ts`). pi-ai is the model layer of the same pi harness this project builds on, so its Anthropic/DeepSeek/OpenRouter/OpenAI adapters are reused rather than reimplemented per vendor.
+- pi-ai's **credential store and OAuth flows are deliberately not used.** Keys come from our own `KeyStore` and are passed per call, so BYO-key resolution stays in one place and there is no ambient credential path that could pick up a key we did not intend to send.
+- No API key is a hard `MissingApiKeyError`. There is no unauthenticated request path and no silent no-op.
+- An unrecognized `MODEL_PROVIDER` throws `UnsupportedProviderError` listing the valid ids. It does **not** fall back to a generic stub — a misconfigured grader must fail at startup rather than return unusable verdicts.
+- A model id the provider does not offer throws `UnknownModelError` (with known ids), and an upstream stream error becomes `ModelCallFailedError` rather than empty text silently failing schema validation.
+- Streaming is collected into one result before validation: a partially streamed verdict is not a verdict.
 
 ## Tests
-`packages/provider/tests/provider.test.ts` — pinned model versioning, missing-key handling, max-2-retry enforcement, fixture cache misses, and two PROTECTED INVARIANT tests: no provider falls back to another vendor's key, and a moving model alias is rejected at construction.
+`packages/provider/tests/provider.test.ts` — pinned model versioning, missing-key handling, max-2-retry enforcement, fixture cache misses, unknown-model and stream-error paths, and temperature/key pass-through (verified against an injected provider factory, so no test touches the network).
+
+PROTECTED INVARIANT tests: no provider falls back to another vendor's key; a moving model alias is rejected at construction; a missing key raises rather than calling unauthenticated; an unrecognized `MODEL_PROVIDER` throws rather than degrading.
 
 Command: `npm --workspace=packages/provider run test`

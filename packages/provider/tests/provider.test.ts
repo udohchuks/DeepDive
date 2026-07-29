@@ -16,6 +16,12 @@ import {
   PINNED_OPENROUTER_MODEL,
   UnpinnedModelError,
   assertPinnedModel,
+  OpenAiModelProvider,
+  UnsupportedProviderError,
+  KNOWN_PROVIDERS,
+  isPiProviderId,
+  callPiModel,
+  UnknownModelError,
 } from '../src/index.js';
 
 describe('Model Provider & Determinism Controls (Phase 2.3)', () => {
@@ -186,5 +192,105 @@ describe('Multi-provider key isolation and model pinning', () => {
       UnpinnedModelError,
     );
     expect(assertPinnedModel('deepseek-chat')).toBe('deepseek-chat');
+  });
+});
+
+describe('Real model transport via pi-ai', () => {
+  const saved = { ...process.env };
+  afterEach(() => {
+    process.env = { ...saved };
+  });
+
+  const req = {
+    role: 'grader' as const,
+    promptVersion: 'v1',
+    systemPrompt: 'You grade.',
+    userPrompt: 'artifact',
+    schema: z.object({ verdict: z.string() }),
+  };
+
+  it('PROTECTED INVARIANT: no API key means a hard error, never an unauthenticated call', async () => {
+    for (const provider of [
+      new AnthropicModelProvider({ getApiKey: () => null }),
+      new DeepSeekModelProvider({ getApiKey: () => null }),
+      new OpenRouterModelProvider({ getApiKey: () => null }),
+      new OpenAiModelProvider({ getApiKey: () => null }),
+    ]) {
+      await expect(provider.generateStructured(req)).rejects.toBeInstanceOf(MissingApiKeyError);
+    }
+  });
+
+  it('PROTECTED INVARIANT: an unrecognized MODEL_PROVIDER throws instead of silently degrading', () => {
+    expect(() => createModelProvider('nonesuch', { getApiKey: () => 'k' })).toThrow(UnsupportedProviderError);
+    expect(() => createModelProvider('nonesuch', { getApiKey: () => 'k' })).toThrow(/MODEL_PROVIDER/);
+  });
+
+  it('every known provider id resolves to a real pi-ai adapter', () => {
+    for (const id of KNOWN_PROVIDERS) {
+      expect(isPiProviderId(id)).toBe(true);
+    }
+    expect(isPiProviderId('nonesuch')).toBe(false);
+  });
+
+  it('rejects a model the provider does not offer, listing known ids', async () => {
+    await expect(
+      callPiModel({
+        providerId: 'deepseek',
+        modelId: 'not-a-real-model',
+        apiKey: 'k',
+        userPrompt: 'x',
+        providerFactory: () =>
+          ({
+            getModels: () => [{ id: 'deepseek-chat' }],
+            streamSimple: () => {
+              throw new Error('must not be reached');
+            },
+          }) as never,
+      }),
+    ).rejects.toBeInstanceOf(UnknownModelError);
+  });
+
+  it('surfaces a provider stream error as ModelCallFailedError rather than empty text', async () => {
+    await expect(
+      callPiModel({
+        providerId: 'deepseek',
+        modelId: 'deepseek-chat',
+        apiKey: 'k',
+        userPrompt: 'x',
+        providerFactory: () =>
+          ({
+            getModels: () => [{ id: 'deepseek-chat' }],
+            streamSimple: () => ({
+              result: async () => ({
+                content: [],
+                stopReason: 'error',
+                errorMessage: 'upstream 429',
+              }),
+            }),
+          }) as never,
+      }),
+    ).rejects.toThrow(/upstream 429/);
+  });
+
+  it('forces temperature 0 and passes the key through to the transport', async () => {
+    let seen: { temperature?: number; apiKey?: string } = {};
+    const text = await callPiModel({
+      providerId: 'deepseek',
+      modelId: 'deepseek-chat',
+      apiKey: 'secret-key',
+      userPrompt: 'hello',
+      providerFactory: () =>
+        ({
+          getModels: () => [{ id: 'deepseek-chat' }],
+          streamSimple: (_m: unknown, _ctx: unknown, opts: { temperature?: number; apiKey?: string }) => {
+            seen = opts;
+            return { result: async () => ({ content: [{ type: 'text', text: 'ok' }], stopReason: 'stop' }) };
+          },
+        }) as never,
+    });
+
+    expect(text).toBe('ok');
+    expect(seen.temperature).toBe(0);
+    expect(seen.apiKey).toBe('secret-key');
   });
 });

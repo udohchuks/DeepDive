@@ -9,6 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@deepdive/core": "0.1.0"
+    "@deepdive/core": "0.1.0",
+    "@earendil-works/pi-ai": "0.83.0"
   }
 }
