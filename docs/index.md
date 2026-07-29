@@ -13,6 +13,7 @@ Index of component documentation (`doc.md`) across the DeepDive monorepo.
 | `@deepdive/agent` | 3.0, 3.1, 3.2, 3.3 | pi SDK harness, permission hooks, Dual-LLM quarantine, and role sessions | [packages/agent/src/doc.md](file:///c:/Users/chukw/DeepDive/packages/agent/src/doc.md) |
 | `@deepdive/agent` (quarantine) | 3.2 | Dual-LLM quarantine boundary filter and prompt-injection containment | [packages/agent/src/quarantine/doc.md](file:///c:/Users/chukw/DeepDive/packages/agent/src/quarantine/doc.md) |
 | `@deepdive/agent` (roles) | 3.3 | Role session factories (Scaffolder, Verifier, Grader) and tool scoping | [packages/agent/src/roles/doc.md](file:///c:/Users/chukw/DeepDive/packages/agent/src/roles/doc.md) |
+| `@deepdive/vcs` | 1.2 | Version control port abstraction (`GitVcs`, `FakeVcs`) | [packages/vcs/src/doc.md](file:///c:/Users/chukw/DeepDive/packages/vcs/src/doc.md) |
 | `@deepdive/content` | 4.1 | Rubric instances, role prompts, L1-L4 rules, struggle rules, golden snapshots | [packages/content/src/doc.md](file:///c:/Users/chukw/DeepDive/packages/content/src/doc.md) |
 | `@deepdive/engine` (runner) | 5.1 | Sandboxed test runner integration (`vitest`, `jest`, `cargo`, `pytest`) & P-5 invariant | [packages/engine/src/runner/doc.md](file:///c:/Users/chukw/DeepDive/packages/engine/src/runner/doc.md) |
 | `@deepdive/engine` (pipeline) | 5.2 | Submission pipeline orchestrator, D-1 deterministic short-circuit gate & SQLite saving | [packages/engine/src/pipeline/doc.md](file:///c:/Users/chukw/DeepDive/packages/engine/src/pipeline/doc.md) |

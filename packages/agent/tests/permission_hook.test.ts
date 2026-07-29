@@ -23,6 +23,25 @@ describe('tool_call Permission Hook (Phase 3.1)', () => {
     expect(readCheck.block).toBe(true);
   });
 
+  it('allows Scaffolder write access to standard workspace files but blocks graded-artifact paths (P-2)', async () => {
+    const hook = createPermissionHook({
+      role: 'scaffolder',
+      gradedArtifactPaths: ['sdd.json', 'rsdd.json', 'cdd.json'],
+    });
+
+    const allowedWrite = await hook({ toolName: 'write', args: { path: 'src/main.ts' }, role: 'scaffolder' });
+    expect(allowedWrite.block).toBe(false);
+
+    const blockedSdd = await hook({ toolName: 'write', args: { path: 'sdd.json' }, role: 'scaffolder' });
+    expect(blockedSdd.block).toBe(true);
+
+    const blockedRsdd = await hook({ toolName: 'write', args: { path: 'rsdd.json' }, role: 'scaffolder' });
+    expect(blockedRsdd.block).toBe(true);
+
+    const blockedCdd = await hook({ toolName: 'write', args: { path: 'cdd.json' }, role: 'scaffolder' });
+    expect(blockedCdd.block).toBe(true);
+  });
+
   it('fails closed on evaluator error', async () => {
     const errorEvaluator = {
       evaluateWriteAccess: () => {

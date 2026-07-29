@@ -48,4 +48,42 @@ describe('Dual-LLM Quarantine Boundary (Phase 3.2)', () => {
 
     expect(() => filterAndSanitizeFindings([malformedPayload])).toThrow(QuarantineFilterError);
   });
+
+  it('Quarantine filter rejects non-UUID finding IDs', () => {
+    const invalidIdFinding = {
+      id: 'not-a-valid-uuid',
+      code: 'CITATION_MISSING',
+      severity: 'error',
+      targetFieldId: 'sdd.modules[0]',
+    };
+
+    expect(() => filterAndSanitizeFindings([invalidIdFinding])).toThrow(QuarantineFilterError);
+  });
+
+  it('Quarantine filter handles empty findings array', () => {
+    const sanitized = filterAndSanitizeFindings([]);
+    expect(sanitized).toEqual([]);
+  });
+
+  it('Quarantine filter processes multiple valid findings cleanly', () => {
+    const findings = [
+      {
+        id: '123e4567-e89b-12d3-a456-426614174001',
+        code: 'CITATION_MISSING' as const,
+        severity: 'error' as const,
+        targetFieldId: 'sdd.modules[0]',
+      },
+      {
+        id: '123e4567-e89b-12d3-a456-426614174002',
+        code: 'INVARIANT_VIOLATED' as const,
+        severity: 'warning' as const,
+        targetFieldId: 'sdd.modules[1]',
+      },
+    ];
+
+    const sanitized = filterAndSanitizeFindings(findings);
+    expect(sanitized).toHaveLength(2);
+    expect(sanitized[0].id).toBe('123e4567-e89b-12d3-a456-426614174001');
+    expect(sanitized[1].id).toBe('123e4567-e89b-12d3-a456-426614174002');
+  });
 });

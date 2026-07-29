@@ -17,6 +17,14 @@ export default defineConfig({
       '@deepdive/engine': path.resolve(__dirname, './packages/engine/src'),
       '@deepdive/greenfield': path.resolve(__dirname, './packages/greenfield/src'),
       '@deepdive/onboarding': path.resolve(__dirname, './packages/onboarding/src'),
+      '@deepdive/vscode-extension': path.resolve(__dirname, './apps/vscode-extension/src'),
+    },
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      reportsDirectory: './coverage',
+      include: ['packages/*/src/**/*.ts', 'apps/*/src/**/*.ts'],
+      exclude: ['**/*.d.ts'],
     },
   },
 });
