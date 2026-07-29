@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.base.json",
+  "files": [],
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/storage" },
+    { "path": "./packages/sandbox" },
+    { "path": "./packages/provider" },
+    { "path": "./packages/agent" },
+    { "path": "./packages/vcs" },
+    { "path": "./packages/content" },
+    { "path": "./packages/engine" },
+    { "path": "./packages/greenfield" },
+    { "path": "./packages/onboarding" },
+    { "path": "./apps/vscode-extension" }
+  ]
+}

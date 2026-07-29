@@ -1,0 +1,17 @@
+{
+  "name": "@deepdive/agent",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@deepdive/core": "0.1.0",
+    "@deepdive/sandbox": "0.1.0",
+    "@deepdive/provider": "0.1.0",
+    "@deepdive/content": "0.1.0"
+  }
+}

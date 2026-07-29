@@ -1,0 +1,31 @@
+{
+  "name": "@deepdive/monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": "22.12.0"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "typecheck": "tsc -b",
+    "check:cycles": "tsx scripts/check_cycles.ts",
+    "check:docs": "tsx scripts/check_docs.ts",
+    "verify": "npm run typecheck && npm run lint && npm run check:cycles && npm run test && npm run check:docs"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "eslint": "9.17.0",
+    "prettier": "3.4.2",
+    "tsx": "4.19.2",
+    "typescript": "5.7.2",
+    "typescript-eslint": "8.18.0",
+    "vitest": "2.1.8"
+  }
+}

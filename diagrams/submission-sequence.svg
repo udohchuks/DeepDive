@@ -1,0 +1,92 @@
+<svg viewBox="0 0 700 520" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>Submission sequence flow</title>
+<desc>The VS Code extension sends a submission to the local orchestrator, which dispatches a sandboxed verifier session to read the repo and run tests, reduces its findings to structured form, passes them to a grader and hint session with no filesystem access, receives back a verdict, writes the turn to local storage, and sends the verdict to the extension. The extension either closes the thread on approval or loops back to a new uncapped round on revision. Hint levels are generated lazily, one at a time, only when actually revealed.</desc>
+
+<defs>
+<marker id="sq" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#5F5E5A"></path>
+</marker>
+</defs>
+
+<rect x="0" y="0" width="700" height="520" fill="#ffffff"></rect>
+
+<g>
+<rect x="20" y="70" width="150" height="70" rx="12" fill="#F1EFE8" stroke="#B4B2A9"></rect>
+<text x="35" y="100" font-size="14" fill="#2C2C2A" font-family="sans-serif" font-weight="500">VS Code</text>
+<text x="35" y="120" font-size="11" fill="#5F5E5A" font-family="sans-serif">1. student submits</text>
+</g>
+
+<g>
+<rect x="200" y="70" width="150" height="70" rx="12" fill="#F1EFE8" stroke="#B4B2A9"></rect>
+<text x="215" y="100" font-size="14" fill="#2C2C2A" font-family="sans-serif" font-weight="500">Orchestrator</text>
+<text x="215" y="120" font-size="11" fill="#5F5E5A" font-family="sans-serif">2. dispatch verifier</text>
+</g>
+
+<g>
+<rect x="380" y="70" width="150" height="70" rx="12" fill="#F1EFE8" stroke="#B4B2A9"></rect>
+<text x="395" y="100" font-size="14" fill="#2C2C2A" font-family="sans-serif" font-weight="500">Verifier session</text>
+<text x="395" y="120" font-size="11" fill="#5F5E5A" font-family="sans-serif">3. read, cite, test</text>
+</g>
+
+<g>
+<rect x="380" y="210" width="150" height="65" rx="12" fill="#F1EFE8" stroke="#B4B2A9"></rect>
+<text x="395" y="238" font-size="13" fill="#2C2C2A" font-family="sans-serif" font-weight="500">Test runner</text>
+<text x="395" y="258" font-size="11" fill="#5F5E5A" font-family="sans-serif">4. if level requires it</text>
+</g>
+
+<g>
+<rect x="560" y="70" width="130" height="60" rx="12" fill="#FAEEDA" stroke="#BA7517"></rect>
+<text x="575" y="97" font-size="13" fill="#412402" font-family="sans-serif" font-weight="500">AI model API</text>
+<text x="575" y="115" font-size="11" fill="#633806" font-family="sans-serif">remote calls</text>
+</g>
+
+<g>
+<rect x="380" y="340" width="150" height="70" rx="12" fill="#F1EFE8" stroke="#B4B2A9"></rect>
+<text x="395" y="370" font-size="14" fill="#2C2C2A" font-family="sans-serif" font-weight="500">Grader + hint</text>
+<text x="395" y="390" font-size="11" fill="#5F5E5A" font-family="sans-serif">5. verdict (no ladder yet)</text>
+</g>
+
+<g>
+<rect x="200" y="340" width="150" height="70" rx="12" fill="#F1EFE8" stroke="#B4B2A9"></rect>
+<text x="215" y="370" font-size="14" fill="#2C2C2A" font-family="sans-serif" font-weight="500">Local storage</text>
+<text x="215" y="390" font-size="11" fill="#5F5E5A" font-family="sans-serif">6. write turn, round</text>
+</g>
+
+<g>
+<rect x="20" y="340" width="150" height="70" rx="12" fill="#F1EFE8" stroke="#B4B2A9"></rect>
+<text x="35" y="370" font-size="14" fill="#2C2C2A" font-family="sans-serif" font-weight="500">VS Code</text>
+<text x="35" y="390" font-size="11" fill="#5F5E5A" font-family="sans-serif">7. render verdict</text>
+</g>
+
+<line x1="170" y1="105" x2="198" y2="105" stroke="#5F5E5A" stroke-width="1.5" marker-end="url(#sq)"></line>
+<line x1="350" y1="105" x2="378" y2="105" stroke="#5F5E5A" stroke-width="1.5" marker-end="url(#sq)"></line>
+<line x1="455" y1="140" x2="455" y2="208" stroke="#5F5E5A" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#sq)"></line>
+<text x="465" y="180" font-size="11" fill="#5F5E5A" font-family="sans-serif">conditional</text>
+<line x1="530" y1="100" x2="558" y2="100" stroke="#5F5E5A" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#sq)" marker-start="url(#sq)"></line>
+
+<line x1="455" y1="140" x2="455" y2="338" stroke="#5F5E5A" stroke-width="1.5" marker-end="url(#sq)"></line>
+<text x="465" y="260" font-size="11" fill="#5F5E5A" font-family="sans-serif">structured findings</text>
+<line x1="600" y1="130" x2="475" y2="338" stroke="#5F5E5A" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#sq)"></line>
+
+<line x1="378" y1="375" x2="352" y2="375" stroke="#5F5E5A" stroke-width="1.5" marker-end="url(#sq)"></line>
+<line x1="198" y1="375" x2="172" y2="375" stroke="#5F5E5A" stroke-width="1.5" marker-end="url(#sq)"></line>
+
+<path d="M 95 340 C 95 250 275 250 275 138" fill="none" stroke="#5F5E5A" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#sq)"></path>
+<text x="95" y="235" font-size="11" fill="#5F5E5A" font-family="sans-serif">8. revise &rarr; new round</text>
+
+<g>
+<rect x="20" y="450" width="330" height="55" rx="12" fill="#F1EFE8" stroke="#B4B2A9"></rect>
+<text x="35" y="475" font-size="13" fill="#2C2C2A" font-family="sans-serif" font-weight="500">Approved</text>
+<text x="35" y="493" font-size="11" fill="#5F5E5A" font-family="sans-serif">thread closes, next phase unlocks</text>
+</g>
+
+<g>
+<rect x="380" y="450" width="290" height="55" rx="12" fill="#E1F5EE" stroke="#0F6E56"></rect>
+<text x="395" y="475" font-size="13" fill="#04342C" font-family="sans-serif" font-weight="500">9. Hint reveal (if requested)</text>
+<text x="395" y="493" font-size="11" fill="#0F6E56" font-family="sans-serif">one small AI call per level, lazily</text>
+</g>
+
+<line x1="95" y1="410" x2="95" y2="448" stroke="#5F5E5A" stroke-width="1.5" marker-end="url(#sq)"></line>
+<line x1="455" y1="410" x2="500" y2="448" stroke="#0F6E56" stroke-width="1.5" marker-end="url(#sq)"></line>
+
+</svg>

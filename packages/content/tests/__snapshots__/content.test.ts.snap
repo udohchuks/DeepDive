@@ -1,0 +1,142 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Content Assets & Golden Snapshots (Phase 4.1) > D-6: Golden snapshots for prompts and rubrics match expected snapshots 1`] = `
+{
+  "role": "scaffolder",
+  "systemPrompt": "You are the Scaffolder role in DeepDive.
+Your responsibility is to write stub files, boilerplate code, and test harnesses during progressive scaffolding.
+Rule 1: You must NEVER write into or modify a file that is itself a graded artifact (e.g. sdd.json, rsdd.json, cdd.json).
+Rule 2: Scaffolding support decreases as demonstrated competence grows (P-7).",
+  "version": "1.0.0",
+}
+`;
+
+exports[`Content Assets & Golden Snapshots (Phase 4.1) > D-6: Golden snapshots for prompts and rubrics match expected snapshots 2`] = `
+{
+  "role": "verifier",
+  "systemPrompt": "You are the Verifier role in DeepDive.
+You are the ONLY role that reads raw repository or student-submitted text (§6).
+Your job is to check citations against the real codebase, trace call chains, confirm behavior, and reduce observations into structured Finding objects.
+You never issue grading verdicts directly; you reduce raw observations to pre-labeled structured findings for the Grader.",
+  "version": "1.0.0",
+}
+`;
+
+exports[`Content Assets & Golden Snapshots (Phase 4.1) > D-6: Golden snapshots for prompts and rubrics match expected snapshots 3`] = `
+{
+  "role": "grader",
+  "systemPrompt": "You are the Grader role in DeepDive.
+You have NO filesystem or shell execution tools (§3).
+You consume ONLY pre-labeled structured Finding objects emitted by the Verifier. You NEVER see raw repo or student text.
+You emit structured rubric verdicts (Questions, Flags) via custom tools. You NEVER propose solution code or write the student's design document on their behalf (P-2).",
+  "version": "1.0.0",
+}
+`;
+
+exports[`Content Assets & Golden Snapshots (Phase 4.1) > D-6: Golden snapshots for prompts and rubrics match expected snapshots 4`] = `
+{
+  "criteria": [
+    {
+      "codeCheckName": "check_non_empty_title",
+      "description": "Project charter must specify a non-empty title",
+      "id": "charter_title_present",
+      "kind": "deterministic",
+    },
+    {
+      "codeCheckName": "check_scope_bounds_present",
+      "description": "Project scope bounds must contain at least one explicit non-feature limitation",
+      "id": "charter_scope_bounded",
+      "kind": "deterministic",
+    },
+    {
+      "description": "Project goal statement clearly articulates problem domain and learning objective",
+      "id": "charter_goal_clarity",
+      "kind": "judged",
+    },
+  ],
+  "id": "rubric_charter_v1",
+  "phaseId": "A",
+  "version": "1.0.0",
+}
+`;
+
+exports[`Content Assets & Golden Snapshots (Phase 4.1) > D-6: Golden snapshots for prompts and rubrics match expected snapshots 5`] = `
+{
+  "criteria": [
+    {
+      "codeCheckName": "check_modules_non_empty",
+      "description": "SDD must define at least one module specification",
+      "id": "sdd_modules_defined",
+      "kind": "deterministic",
+    },
+    {
+      "codeCheckName": "check_citations_valid",
+      "description": "All module file citations resolve to valid canonical files and line ranges",
+      "id": "sdd_citations_valid",
+      "kind": "deterministic",
+    },
+    {
+      "description": "Module breakdown and data flows represent a coherent system architecture",
+      "id": "sdd_architectural_coherence",
+      "kind": "judged",
+    },
+  ],
+  "id": "rubric_sdd_v1",
+  "phaseId": "B",
+  "version": "1.0.0",
+}
+`;
+
+exports[`Content Assets & Golden Snapshots (Phase 4.1) > D-6: Golden snapshots for prompts and rubrics match expected snapshots 6`] = `
+{
+  "criteria": [
+    {
+      "codeCheckName": "check_rsdd_level",
+      "description": "RSDD level must be between L1 and L7",
+      "id": "rsdd_level_valid",
+      "kind": "deterministic",
+    },
+    {
+      "codeCheckName": "check_repo_citations",
+      "description": "Every claimed module in the reverse SDD must carry valid code citations against target repo commit",
+      "id": "rsdd_citations_grounded",
+      "kind": "deterministic",
+    },
+    {
+      "description": "Subsystem module responsibilities accurately reflect actual codebase design",
+      "id": "rsdd_design_accuracy",
+      "kind": "judged",
+    },
+  ],
+  "id": "rubric_rsdd_v1",
+  "phaseId": "OB-B",
+  "version": "1.0.0",
+}
+`;
+
+exports[`Content Assets & Golden Snapshots (Phase 4.1) > D-6: Golden snapshots for prompts and rubrics match expected snapshots 7`] = `
+{
+  "criteria": [
+    {
+      "codeCheckName": "check_characterization_test_path",
+      "description": "CDD must specify a non-empty characterization test path",
+      "id": "cdd_characterization_test_present",
+      "kind": "deterministic",
+    },
+    {
+      "codeCheckName": "check_cdd_target_citations",
+      "description": "Proposed fix targets specific cited files and line ranges",
+      "id": "cdd_target_files_cited",
+      "kind": "deterministic",
+    },
+    {
+      "description": "Proposed contribution fix logically resolves the identified issue without breaking invariants",
+      "id": "cdd_fix_rationale",
+      "kind": "judged",
+    },
+  ],
+  "id": "rubric_cdd_v1",
+  "phaseId": "OB-E",
+  "version": "1.0.0",
+}
+`;
