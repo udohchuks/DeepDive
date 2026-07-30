@@ -294,3 +294,44 @@ describe('Real model transport via pi-ai', () => {
     expect(seen.apiKey).toBe('secret-key');
   });
 });
+
+describe('PROTECTED INVARIANT: a retry must differ from the attempt it repairs', () => {
+  const schema = z.object({ verdict: z.string() });
+
+  it('feeds the validation error back instead of re-sending the same prompt', async () => {
+    const prompts: string[] = [];
+    let call = 0;
+
+    const result = await executeStructuredModelCall(
+      { role: 'grader', promptVersion: '1', systemPrompt: 's', userPrompt: 'original', schema },
+      async (prompt) => {
+        prompts.push(prompt);
+        call += 1;
+        // Wrong shape first, correct once told what was wrong.
+        return call === 1 ? '[{"verdict":"approved"}]' : '{"verdict":"approved"}';
+      },
+    );
+
+    expect(result).toEqual({ verdict: 'approved' });
+    // At temperature 0 an unchanged prompt returns an identical response, so a
+    // retry that does not carry the error is three guaranteed failures.
+    expect(prompts).toHaveLength(2);
+    expect(prompts[0]).toBe('original');
+    expect(prompts[1]).not.toBe('original');
+    expect(prompts[1]).toContain('did not match the required shape');
+  });
+
+  it('still gives up after three attempts', async () => {
+    let calls = 0;
+    await expect(
+      executeStructuredModelCall(
+        { role: 'grader', promptVersion: '1', systemPrompt: 's', userPrompt: 'p', schema },
+        async () => {
+          calls += 1;
+          return '[]';
+        },
+      ),
+    ).rejects.toThrow(/after 3 attempts/);
+    expect(calls).toBe(3);
+  });
+});

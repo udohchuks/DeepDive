@@ -47,18 +47,32 @@ Steps 3 and 4 ask before each mutating command by default. Add `--auto` to let t
 **Codebase Onboarding** — you learn and contribute to an existing repository:
 
 ```bash
-# 1. Clone the repo and pin the commit you will be graded against
+# OB-A. Clone the repo, pin the commit, state what you intend to learn
 deepdive onboard https://github.com/some/project.git ./study
+deepdive grade repo-charter ./charter.json --project ./study
 
-# 2. Grade your charter, then your reverse SDD: what the code actually does
-deepdive grade charter ./charter.json --project ./study
+# OB-B. Reverse-engineer the design: what the code actually does
 deepdive grade rsdd ./rsdd.json --project ./study
 
-# 3. Propose a contribution
+# OB-C. Plan your reading, in dependency order
+deepdive grade plan ./plan.json --project ./study
+
+# OB-D. Get the characterization tests green (the runner decides, not a model)
+deepdive characterize ./study vitest --project ./study
+
+# OB-E. Propose a contribution
 deepdive grade cdd ./cdd.json --project ./study
+
+# OB-F/OB-G. Comprehension check, then the completion record
+deepdive quiz --project ./study
+deepdive complete --project ./study
 ```
 
+Note `repo-charter`, not `charter`: the greenfield charter says what you will build, the repo learning charter says what you intend to learn from code that already exists, and they are graded at different phases.
+
 The commit is pinned at clone time, not resolved per submission: upstream moves, and evidence checked against a moving target would pass one day and fail the next with your work unchanged.
+
+Three of those phases are decided without a model at all. **OB-C**: "reading units topologically ordered" is a fact about the dependency graph, so a plan that reads a caller before the thing it calls is rejected by a code check. **OB-D**: the test runner's result is the verdict — no model is constructed on that path (P-5). **OB-G**: the completion record is derived from the append-only round history, so you cannot claim a phase you never passed. **OB-F** calls a model to write the questions, but scores by exact match, so the grade is the same every time you re-run it.
 
 Every citation in an `rsdd` is checked against that commit with git *before* any model call. A citation naming a file that does not exist is rejected for free — that check is the point of the mode, since the claim being graded is that you read the code:
 
@@ -116,6 +130,6 @@ Every command that produces a result records a round: `grade` under the rubric's
 
 Codebase Onboarding is runnable from the CLI: `onboard` clones and pins, and `grade rsdd` / `grade cdd` are wired with repo-grounded citation checking. Running a cloned repository's test suite is gated on an explicit prompt rather than an OS sandbox — that is a deliberate, stated trade-off, not a finished isolation story, and process isolation is still the right answer before this is put in front of students who will paste in arbitrary repository URLs.
 
-Not yet wired: the VS Code extension is not a loadable extension. Phases OB-C, OB-D, OB-F and OB-G have validators but no CLI command, so the onboarding path currently covers the charter, the reverse SDD and the contribution proposal, not the guided reading plan or the quiz.
+All seven onboarding phases OB-A through OB-G are reachable from the CLI. Not yet wired: the VS Code extension is not a loadable extension, and the hint system (`HINT_LEVEL_RULES`, the L4 procedural ceiling) has no CLI surface, so a completion record's hint profile is always empty.
 
 Licensed MIT. Packages declare `files`, pinned `engines` and public `publishConfig`, and `npm pack` includes the migration SQL the built runner resolves at run time, so `npm publish --workspaces` is unblocked.

@@ -7,3 +7,5 @@ export * from './approver.js';
 export * from './agent_commands.js';
 export * from './session_store.js';
 export * from './onboarding_commands.js';
+export * from './onboarding_phases.js';
+export * from './prompt.js';

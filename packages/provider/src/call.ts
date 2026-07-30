@@ -43,6 +43,30 @@ export function assertPinnedModel(model: string): string {
   return model;
 }
 
+/**
+ * Restates a failed attempt as a correction the next attempt can act on.
+ *
+ * Retrying at temperature 0 with an unchanged prompt is deterministic, so it
+ * would return the identical invalid response every time — three guaranteed
+ * failures at triple the cost. Feeding the validation error back changes the
+ * input, which is what makes the retry a repair rather than a re-roll, and it
+ * does so without raising the temperature and losing D-2's determinism.
+ */
+export function buildRepairPrompt(userPrompt: string, error: z.ZodError): string {
+  const problems = error.issues
+    .map((issue) => `  - ${issue.path.join('.') || '(root)'}: ${issue.message}`)
+    .join('\n');
+
+  return [
+    userPrompt,
+    '',
+    'Your previous response did not match the required shape:',
+    problems,
+    '',
+    'Return only the corrected JSON object. No prose, no markdown fence, no array wrapper.',
+  ].join('\n');
+}
+
 export async function executeStructuredModelCall<T>(
   options: ModelRequestOptions<T>,
   callFn: (prompt: string, temp: number) => Promise<string>,
@@ -53,7 +77,10 @@ export async function executeStructuredModelCall<T>(
 
   while (attempts < 3) { // Initial call + max 2 retries = 3 attempts total (D-2)
     attempts += 1;
-    const rawResponse = await callFn(options.userPrompt, temperature);
+    const prompt = lastZodError
+      ? buildRepairPrompt(options.userPrompt, lastZodError)
+      : options.userPrompt;
+    const rawResponse = await callFn(prompt, temperature);
     try {
       const parsedJson = JSON.parse(rawResponse);
       return options.schema.parse(parsedJson);

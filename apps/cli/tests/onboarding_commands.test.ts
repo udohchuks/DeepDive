@@ -3,7 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { Vcs, PrOptions } from '@deepdive/core';
-import { readOnboardingConfig, runOnboard, verifyRsddCitations } from '../src/onboarding_commands.js';
+import { readOnboardingConfig, runOnboard, verifyRepoCitations } from '../src/onboarding_commands.js';
 
 const created: string[] = [];
 
@@ -112,7 +112,7 @@ describe('PROTECTED INVARIANT: RSDD citations are checked against the repository
     const vcs = new FakeVcs(['src/auth.ts']);
     const dir = await workspace(vcs);
 
-    const result = await verifyRsddCitations(rsdd([{ filePath: 'src/auth.ts' }]), dir, vcs);
+    const result = await verifyRepoCitations(rsdd([{ filePath: 'src/auth.ts' }]), dir, vcs);
 
     expect(result.passed).toBe(true);
     expect(vcs.askedFor).toContainEqual({ sha: HEAD, filePath: 'src/auth.ts' });
@@ -122,7 +122,7 @@ describe('PROTECTED INVARIANT: RSDD citations are checked against the repository
     const vcs = new FakeVcs(['src/auth.ts']);
     const dir = await workspace(vcs);
 
-    const result = await verifyRsddCitations(rsdd([{ filePath: 'src/invented.ts' }]), dir, vcs);
+    const result = await verifyRepoCitations(rsdd([{ filePath: 'src/invented.ts' }]), dir, vcs);
 
     // The whole point of onboarding mode: the student must have read the code.
     // A citation nothing can resolve is the cheapest possible thing to catch.
@@ -137,7 +137,7 @@ describe('PROTECTED INVARIANT: RSDD citations are checked against the repository
     const dir = await workspace(vcs);
 
     const payload = { ...rsdd([{ filePath: 'src/auth.ts' }]), targetCommitSha: 'b'.repeat(40) };
-    const result = await verifyRsddCitations(payload, dir, vcs);
+    const result = await verifyRepoCitations(payload, dir, vcs);
 
     // Otherwise the citations were verified against a tree we never cloned.
     expect(result.passed).toBe(false);
@@ -146,7 +146,7 @@ describe('PROTECTED INVARIANT: RSDD citations are checked against the repository
 
   it('refuses to grade an RSDD outside an onboarding workspace', async () => {
     await expect(
-      verifyRsddCitations(rsdd([{ filePath: 'x.ts' }]), tempDir(), new FakeVcs()),
+      verifyRepoCitations(rsdd([{ filePath: 'x.ts' }]), tempDir(), new FakeVcs()),
     ).rejects.toThrow(/not an onboarding workspace/);
   });
 });

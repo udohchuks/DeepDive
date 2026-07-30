@@ -1,3 +1,5 @@
+import { checkReadingOrder, ReadingUnit } from '@deepdive/core';
+
 export interface CodeCheckResult {
   passed: boolean;
   message?: string;
@@ -115,6 +117,84 @@ export const CodeCheckRegistry: Record<string, CodeCheckFn> = {
     }
 
     return { passed: true };
+  },
+  check_repo_charter_fields: (payload) => {
+    const repoName = payload.repoName;
+    if (typeof repoName !== 'string' || repoName.trim().length === 0) {
+      return { passed: false, message: 'Charter must name the repository' };
+    }
+    if (!['learn', 'contribute', 'replicate'].includes(payload.intent as string)) {
+      return { passed: false, message: 'intent must be one of: learn, contribute, replicate' };
+    }
+    if (!Array.isArray(payload.mvpScope) || payload.mvpScope.length === 0) {
+      return {
+        passed: false,
+        message: 'mvpScope must list at least one thing you will do — an unbounded charter cannot be finished',
+      };
+    }
+    return { passed: true };
+  },
+
+  check_reading_units_cited: (payload) => {
+    const units = payload.readingPlan;
+    if (!Array.isArray(units) || units.length === 0) {
+      return { passed: false, message: 'Reading plan must contain at least one unit' };
+    }
+
+    for (const unit of units) {
+      const u = unit as { id?: unknown; citations?: unknown };
+      if (typeof u?.id !== 'string' || u.id.trim().length === 0) {
+        return { passed: false, message: 'Every reading unit needs an id' };
+      }
+      if (!Array.isArray(u.citations) || u.citations.length === 0) {
+        return {
+          passed: false,
+          message: `Unit "${u.id}" cites no code. A unit with nothing to read is not a unit.`,
+        };
+      }
+      for (const citation of u.citations) {
+        const c = citation as { filePath?: unknown; lineStart?: unknown; lineEnd?: unknown };
+        if (typeof c?.filePath !== 'string' || c.filePath.trim().length === 0) {
+          return { passed: false, message: `Unit "${u.id}" has a citation with no filePath` };
+        }
+        if (!Number.isInteger(c.lineStart) || !Number.isInteger(c.lineEnd)) {
+          return {
+            passed: false,
+            message: `Unit "${u.id}" cites "${c.filePath}" without a line range — "read this file" is not a reading unit.`,
+          };
+        }
+      }
+    }
+
+    return { passed: true };
+  },
+
+  /**
+   * The OB-C exit criterion, decided without a model.
+   *
+   * "Reading units topologically ordered" is a fact about the dependency graph,
+   * so a plan that schedules a caller before the thing it calls is wrong in a
+   * way no judgement is needed to establish.
+   */
+  check_reading_plan_ordered: (payload) => {
+    const units = payload.readingPlan;
+    if (!Array.isArray(units)) {
+      return { passed: false, message: 'Reading plan must be an array of units' };
+    }
+
+    for (const unit of units) {
+      if (!Array.isArray((unit as { dependsOn?: unknown })?.dependsOn)) {
+        return {
+          passed: false,
+          message: `Unit "${(unit as { id?: string })?.id ?? '?'}" must declare dependsOn (use [] if it depends on nothing)`,
+        };
+      }
+    }
+
+    const result = checkReadingOrder(units as ReadingUnit[]);
+    return result.ordered
+      ? { passed: true }
+      : { passed: false, message: result.problems.join('; ') };
   },
 };
 

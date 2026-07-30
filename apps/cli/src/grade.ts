@@ -1,18 +1,38 @@
 import { z } from 'zod';
 import { Finding, ModelProvider, RubricDefinition } from '@deepdive/core';
-import { CharterRubric, SddRubric, RsddRubric, CddRubric, GraderPrompt } from '@deepdive/content';
+import {
+  CharterRubric,
+  SddRubric,
+  RsddRubric,
+  CddRubric,
+  ReadingPlanRubric,
+  RepoCharterRubric,
+  GraderPrompt,
+} from '@deepdive/content';
 import { evaluateDeterministicGate } from '@deepdive/engine';
 
 /** Rubrics reachable from the CLI, keyed by the name a student would type. */
 export const CLI_RUBRICS: Record<string, RubricDefinition> = {
   charter: CharterRubric,
   sdd: SddRubric,
+  'repo-charter': RepoCharterRubric,
   rsdd: RsddRubric,
+  plan: ReadingPlanRubric,
   cdd: CddRubric,
 };
 
+/**
+ * Rubrics whose citations must resolve in the cloned repository, mapped to the
+ * criterion a broken citation is recorded against.
+ */
+export const CITATION_CRITERION: Record<string, string> = {
+  rsdd: 'rsdd_citations_grounded',
+  plan: 'plan_units_present',
+  cdd: 'cdd_target_files_cited',
+};
+
 /** Rubrics whose evidence must be checked against a cloned repository. */
-export const ONBOARDING_RUBRICS = new Set(['rsdd', 'cdd']);
+export const ONBOARDING_RUBRICS = new Set(Object.keys(CITATION_CRITERION));
 
 /**
  * The Grader's structured output. Validated with Zod and never coerced: an
@@ -50,6 +70,14 @@ export async function runGrade(
   rubricName: string,
   artifactPayload: Record<string, unknown>,
   provider: ModelProvider,
+  /**
+   * Earlier approved artifacts this rubric judges against.
+   *
+   * The reading-plan rubric asks whether the units cover the subsystems claimed
+   * in the reverse SDD, which the Grader cannot answer if it is never shown the
+   * reverse SDD — it would have to either guess or refuse, and it refused.
+   */
+  context?: Record<string, unknown>,
 ): Promise<GradeResult> {
   const rubric = CLI_RUBRICS[rubricName];
   if (!rubric) {
@@ -88,6 +116,7 @@ export async function runGrade(
         rubricId: rubric.id,
         criteria: judged.map((c) => ({ id: c.id, description: c.description })),
         artifact: artifactPayload,
+        ...(context ? { approvedContext: context } : {}),
         instructions:
           'Return JSON matching {"verdict":"approved"|"revise"|"clarifying_question","criterionFindings":[{"criterionId":string,"met":boolean,"comment":string}]}. Do not propose replacement text for the student.',
       },

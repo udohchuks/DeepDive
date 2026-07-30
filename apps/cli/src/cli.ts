@@ -1,8 +1,18 @@
 import { readFile } from 'fs/promises';
 import { createModelProvider } from '@deepdive/provider';
 import { buildDoctorReport } from './doctor.js';
-import { CLI_RUBRICS, runGrade } from './grade.js';
-import { readOnboardingConfig, runOnboard, verifyRsddCitations } from './onboarding_commands.js';
+import { CITATION_CRITERION, CLI_RUBRICS, ONBOARDING_RUBRICS, runGrade } from './grade.js';
+import { readOnboardingConfig, runOnboard, verifyRepoCitations } from './onboarding_commands.js';
+import {
+  buildCompletionRecord,
+  generateQuiz,
+  isTestFramework,
+  runCharacterize,
+  scoreQuiz,
+  TEST_FRAMEWORKS,
+  writeCompletionRecord,
+} from './onboarding_phases.js';
+import { askMultipleChoice } from './prompt.js';
 import { buildRoleModel, PiBackedKeyStore, runScaffold, runVerify } from './agent_commands.js';
 import { createTerminalApprover } from './approver.js';
 import { SessionStore } from './session_store.js';
@@ -22,9 +32,20 @@ Usage:
   deepdive grade <rubric> <artifact.json>
       Run the deterministic gate, then grade judged criteria with the model.
       Rubrics: ${Object.keys(CLI_RUBRICS).join(', ')}
-      rsdd citations are checked against the cloned repo at the pinned commit
-      before any model call, so a citation to a file that does not exist is
-      free to reject.
+      Onboarding rubrics (rsdd, plan, cdd) have their citations checked
+      against the cloned repo at the pinned commit before any model call, so
+      a citation to a file that does not exist is free to reject.
+
+  deepdive characterize <workspace> [vitest|jest|cargo|pytest]
+      Phase OB-D. Run the repository's test suite. The runner decides the
+      verdict — no model is called on this path.
+
+  deepdive quiz
+      Phase OB-F. Comprehension questions generated from your approved
+      reverse SDD, scored by exact match.
+
+  deepdive complete
+      Phase OB-G. Derive the completion record from your approved rounds.
 
   deepdive history
       Show every round recorded for this project, oldest first.
@@ -221,8 +242,9 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       // checked against that repository before anything else. This is the same
       // deterministic-first principle as the gate (D-1), extended to evidence
       // the gate cannot reach: a fabricated citation costs no model call.
-      if (rubricName === 'rsdd') {
-        const citations = await verifyRsddCitations(payload, projectDir);
+      if (ONBOARDING_RUBRICS.has(rubricName)) {
+        const criterion = CITATION_CRITERION[rubricName]!;
+        const citations = await verifyRepoCitations(payload, projectDir, undefined, criterion);
         for (const line of citations.lines) io.out(line);
         if (!citations.passed) {
           recordRoundFor(projectDir, io, {
@@ -238,8 +260,24 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
 
       // Same pi-aware resolution the agent roles use, so the Grader cannot end
       // up authenticating from a different source than scaffold/verify.
+      // A reading plan is judged against the reverse SDD it is meant to cover,
+      // read back from the record so the two cannot disagree.
+      let context: Record<string, unknown> | undefined;
+      if (rubricName === 'plan') {
+        const store = new SessionStore({ projectDir });
+        try {
+          context = store.latestArtifact('rsdd') ?? undefined;
+        } finally {
+          store.close();
+        }
+        if (!context) {
+          io.err('No reverse SDD on record. Run "deepdive grade rsdd <rsdd.json>" first.');
+          return 1;
+        }
+      }
+
       const provider = createModelProvider(undefined, new PiBackedKeyStore());
-      const result = await runGrade(rubricName, payload, provider);
+      const result = await runGrade(rubricName, payload, provider, context);
       for (const line of result.lines) io.out(line);
 
       // Record the submission whatever the outcome. A rejected round is the
@@ -281,6 +319,133 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       } finally {
         store.close();
       }
+    }
+
+    if (command === 'characterize') {
+      const [workspace, framework = 'vitest'] = rest;
+      if (!workspace) {
+        io.err(`Usage: deepdive characterize <workspace> [${TEST_FRAMEWORKS.join('|')}]`);
+        return 1;
+      }
+      if (!isTestFramework(framework)) {
+        io.err(`Unknown framework "${framework}". One of: ${TEST_FRAMEWORKS.join(', ')}`);
+        return 1;
+      }
+
+      const onboarding = readOnboardingConfig(workspace);
+      if (onboarding && !(await confirmThirdPartyCode(workspace, onboarding.repoUrl, io))) {
+        io.err('declined — not running third-party code.');
+        return 1;
+      }
+
+      const outcome = await runCharacterize(workspace, framework);
+      for (const line of outcome.lines) io.out(line);
+
+      // P-5: the runner decides. Nothing on this path can call a model.
+      recordRoundFor(projectDir, io, {
+        phaseId: 'OB-D',
+        status: outcome.passed ? 'approved' : 'revise',
+        artifactType: 'characterization',
+        roleId: 'test_runner',
+        artifactPayload: {
+          framework,
+          workspace,
+          totalPassed: outcome.result.totalPassed,
+          totalFailed: outcome.result.totalFailed,
+          totalSkipped: outcome.result.totalSkipped,
+        },
+      });
+
+      return outcome.passed ? 0 : 1;
+    }
+
+    if (command === 'quiz') {
+      const store = new SessionStore({ projectDir });
+      let rsdd: Record<string, unknown> | null;
+      try {
+        rsdd = store.latestArtifact('rsdd');
+      } finally {
+        store.close();
+      }
+
+      if (!rsdd) {
+        io.err('No reverse SDD on record. Run "deepdive grade rsdd <rsdd.json>" first.');
+        return 1;
+      }
+
+      const provider = createModelProvider(undefined, new PiBackedKeyStore());
+      const questions = await generateQuiz(rsdd, provider);
+      if (questions.length === 0) {
+        io.err('The model returned no answerable questions. Try again.');
+        return 1;
+      }
+
+      io.out(`${questions.length} questions from your approved reverse SDD.\n`);
+      const answers: string[] = [];
+      for (const question of questions) {
+        const answer = await askMultipleChoice(question.question, question.options, io.out);
+        if (answer === null) {
+          io.err('\nno answer given — a quiz needs an interactive terminal.');
+          return 1;
+        }
+        answers.push(answer);
+      }
+
+      // Scored by exact match, so the grade is the same every time (D-1).
+      const score = scoreQuiz(questions, answers);
+      io.out('');
+      for (const line of score.lines) io.out(line);
+
+      recordRoundFor(projectDir, io, {
+        phaseId: 'OB-F',
+        status: score.passed ? 'approved' : 'revise',
+        artifactType: 'quiz',
+        roleId: 'grader',
+        artifactPayload: {
+          correct: score.correct,
+          total: score.total,
+          questions: questions.map((q, i) => ({
+            question: q.question,
+            given: answers[i],
+            correctAnswer: q.correctAnswer,
+          })),
+        },
+      });
+
+      return score.passed ? 0 : 1;
+    }
+
+    if (command === 'complete') {
+      const store = new SessionStore({ projectDir });
+      try {
+        const charter = store.latestArtifact('repo-charter');
+        const title = typeof charter?.repoName === 'string' ? charter.repoName : null;
+        if (!title) {
+          io.err(
+            'No repo learning charter on record. Run "deepdive grade repo-charter <charter.json>" first.',
+          );
+          return 1;
+        }
+
+        const outcome = buildCompletionRecord(store.projectId, title, store.history());
+        for (const line of outcome.lines) io.out(line);
+        if (!outcome.complete) return 1;
+
+        const file = writeCompletionRecord(projectDir, outcome.record!);
+        io.out(`\nwritten to ${file}`);
+      } finally {
+        store.close();
+      }
+
+      recordRoundFor(projectDir, io, {
+        phaseId: 'OB-G',
+        status: 'approved',
+        artifactType: 'completion',
+        roleId: 'engine',
+        artifactPayload: { derivedFrom: 'round history' },
+      });
+
+      return 0;
     }
 
     if (command === 'scaffold' || command === 'verify') {

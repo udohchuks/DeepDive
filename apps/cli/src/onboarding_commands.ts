@@ -82,24 +82,61 @@ export interface CitationCheckResult {
   lines: string[];
 }
 
-interface CitedModule {
+interface CitedGroup {
+  id?: string;
   name?: string;
   citations?: { filePath?: unknown }[];
 }
 
 /**
- * Verifies every RSDD citation resolves at the pinned commit.
+ * Pulls every cited file path out of an onboarding artifact.
  *
- * This is the check the rubric describes and `check_repo_citations` cannot
+ * The three artifacts nest citations differently — an RSDD under `modules`, a
+ * reading plan under `readingPlan`, a CDD flat under `targetFiles` — but the
+ * guarantee is the same for all of them, so the traversal is shared rather than
+ * written once per rubric and drifting.
+ */
+export function collectCitations(
+  payload: Record<string, unknown>,
+): { label: string; filePath: string }[] {
+  const found: { label: string; filePath: string }[] = [];
+
+  const addGroup = (group: CitedGroup) => {
+    const label = group?.name ?? group?.id ?? '?';
+    for (const citation of group?.citations ?? []) {
+      if (typeof citation?.filePath === 'string') found.push({ label, filePath: citation.filePath });
+    }
+  };
+
+  for (const key of ['modules', 'readingPlan']) {
+    const groups = payload[key];
+    if (Array.isArray(groups)) for (const group of groups) addGroup(group as CitedGroup);
+  }
+
+  if (Array.isArray(payload.targetFiles)) {
+    for (const citation of payload.targetFiles) {
+      const filePath = (citation as { filePath?: unknown })?.filePath;
+      if (typeof filePath === 'string') found.push({ label: 'targetFiles', filePath });
+    }
+  }
+
+  return found;
+}
+
+/**
+ * Verifies every citation in an onboarding artifact resolves at the pinned commit.
+ *
+ * This is the check the rubrics describe and `check_repo_citations` cannot
  * perform: code checks are pure and synchronous, and answering "does this path
  * exist in the repo" needs git. Running it here, before the gate, means a
- * fabricated citation costs nothing — no model call is made for an RSDD whose
- * evidence does not exist.
+ * fabricated citation costs nothing — no model call is made for an artifact
+ * whose evidence does not exist.
  */
-export async function verifyRsddCitations(
+export async function verifyRepoCitations(
   payload: Record<string, unknown>,
   workspace: string,
   vcs: Vcs = new GitVcs(),
+  criterionId = 'rsdd_citations_grounded',
 ): Promise<CitationCheckResult> {
   const config = readOnboardingConfig(workspace);
   if (!config) {
@@ -108,40 +145,38 @@ export async function verifyRsddCitations(
     );
   }
 
-  // The RSDD names the commit it describes; if that disagrees with the pinned
-  // one, the citations were checked against a tree we did not clone.
+  // The artifact names the commit it describes; if that disagrees with the
+  // pinned one, the citations were checked against a tree we did not clone.
   const claimed = payload.targetCommitSha;
   if (typeof claimed === 'string' && claimed !== config.targetCommitSha) {
     return {
       passed: false,
       lines: [
-        `citation check: FAILED — RSDD targets commit ${claimed}, workspace is pinned to ${config.targetCommitSha}`,
+        `citation check: FAILED — artifact targets commit ${claimed}, workspace is pinned to ${config.targetCommitSha}`,
       ],
       findings: [
         {
           id: new CryptoIdGenerator().generate(),
           code: 'BOUND_VIOLATED',
           severity: 'error',
-          targetFieldId: 'rsdd_citations_grounded',
+          targetFieldId: criterionId,
         },
       ],
     };
   }
 
-  const modules = Array.isArray(payload.modules) ? (payload.modules as CitedModule[]) : [];
   const missing: string[] = [];
-
-  for (const mod of modules) {
-    for (const citation of mod?.citations ?? []) {
-      const filePath = citation?.filePath;
-      if (typeof filePath !== 'string') continue;
-      const exists = await vcs.fileExistsAtCommit(workspace, config.targetCommitSha, filePath);
-      if (!exists) missing.push(`${mod?.name ?? '?'} → ${filePath}`);
-    }
+  for (const { label, filePath } of collectCitations(payload)) {
+    const exists = await vcs.fileExistsAtCommit(workspace, config.targetCommitSha, filePath);
+    if (!exists) missing.push(`${label} → ${filePath}`);
   }
 
   if (missing.length === 0) {
-    return { passed: true, findings: [], lines: ['citation check: every cited file exists at the pinned commit'] };
+    return {
+      passed: true,
+      findings: [],
+      lines: ['citation check: every cited file exists at the pinned commit'],
+    };
   }
 
   const ids = new CryptoIdGenerator();
@@ -155,7 +190,7 @@ export async function verifyRsddCitations(
       id: ids.generate(),
       code: 'BOUND_VIOLATED' as const,
       severity: 'error' as const,
-      targetFieldId: 'rsdd_citations_grounded',
+      targetFieldId: criterionId,
     })),
   };
 }

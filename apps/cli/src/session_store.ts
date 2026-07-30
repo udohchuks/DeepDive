@@ -165,6 +165,24 @@ export class SessionStore {
     return round;
   }
 
+  /**
+   * The most recent submission of one artifact type, or null.
+   *
+   * Later phases build on earlier ones — the quiz is generated from the
+   * approved reverse SDD — and reading it back from the record rather than
+   * asking the student to re-supply the file means the two cannot disagree.
+   */
+  latestArtifact(artifactType: string): Record<string, unknown> | null {
+    const record = this.artifacts.getLatestArtifact(this.projectId, artifactType);
+    if (!record) return null;
+
+    try {
+      return JSON.parse(record.contentJson) as Record<string, unknown>;
+    } catch {
+      throw new Error(`Stored ${artifactType} artifact is not readable JSON.`);
+    }
+  }
+
   /** Full round history, oldest first, with each round's findings attached. */
   history(): RoundSummary[] {
     return this.rounds.getRounds(this.projectId).map((round) => {

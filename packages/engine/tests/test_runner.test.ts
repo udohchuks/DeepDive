@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { parseTestOutput } from '../src/index.js';
+import {
+  parseTestOutput,
+  resolveJsFramework,
+  LocalTestRunner,
+  TestRunnerSpawnError,
+} from '../src/index.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -43,5 +48,29 @@ describe('Test Runner Output Parser (Phase 5.1)', () => {
     expect(runnerCode).not.toContain('generateStructured');
     expect(parserCode).not.toContain('@deepdive/provider');
     expect(parserCode).not.toContain('generateStructured');
+  });
+});
+
+describe('PROTECTED INVARIANT: a runner that never started is not a failing suite', () => {
+  it('runs the framework entry with the current Node, never a launcher', () => {
+    // npx is npx.cmd on Windows, which execFile cannot find by name and modern
+    // Node refuses to spawn without a shell — so every run failed to start.
+    expect(resolveJsFramework('vitest', '/w', '/node', () => true)).toEqual({ command: '/node', args: [path.join('/w', 'node_modules/vitest/vitest.mjs')] });
+  });
+
+  it('reports a clear error when the framework is not installed', () => {
+    expect(() => resolveJsFramework('vitest', '/w', '/node', () => false)).toThrow(
+      /not installed/,
+    );
+  });
+
+  it('throws rather than reporting 0 passed / 0 failed when spawn fails', async () => {
+    const runner = new LocalTestRunner(async () => {
+      throw new TestRunnerSpawnError('npx', 'ENOENT');
+    });
+
+    // Under P-5 the runner's answer is authoritative, so "the suite failed" for
+    // a command that never ran would be an authoritative falsehood.
+    await expect(runner.runTests('vitest', '.')).rejects.toThrow(/No tests were run/);
   });
 });
