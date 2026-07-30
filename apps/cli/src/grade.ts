@@ -1,13 +1,18 @@
 import { z } from 'zod';
 import { Finding, ModelProvider, RubricDefinition } from '@deepdive/core';
-import { CharterRubric, SddRubric, GraderPrompt } from '@deepdive/content';
+import { CharterRubric, SddRubric, RsddRubric, CddRubric, GraderPrompt } from '@deepdive/content';
 import { evaluateDeterministicGate } from '@deepdive/engine';
 
 /** Rubrics reachable from the CLI, keyed by the name a student would type. */
 export const CLI_RUBRICS: Record<string, RubricDefinition> = {
   charter: CharterRubric,
   sdd: SddRubric,
+  rsdd: RsddRubric,
+  cdd: CddRubric,
 };
+
+/** Rubrics whose evidence must be checked against a cloned repository. */
+export const ONBOARDING_RUBRICS = new Set(['rsdd', 'cdd']);
 
 /**
  * The Grader's structured output. Validated with Zod and never coerced: an

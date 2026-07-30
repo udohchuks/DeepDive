@@ -2,6 +2,7 @@
   "name": "@deepdive/cli",
   "version": "0.1.0",
   "type": "module",
+  "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -25,9 +26,11 @@
     "@deepdive/content": "0.1.0",
     "@deepdive/core": "0.1.0",
     "@deepdive/engine": "0.1.0",
+    "@deepdive/onboarding": "0.1.0",
     "@deepdive/policy": "0.1.0",
     "@deepdive/provider": "0.1.0",
     "@deepdive/storage": "0.1.0",
+    "@deepdive/vcs": "0.1.0",
     "zod": "3.24.1"
   }
 }

@@ -2,6 +2,7 @@ import { readFile } from 'fs/promises';
 import { createModelProvider } from '@deepdive/provider';
 import { buildDoctorReport } from './doctor.js';
 import { CLI_RUBRICS, runGrade } from './grade.js';
+import { readOnboardingConfig, runOnboard, verifyRsddCitations } from './onboarding_commands.js';
 import { buildRoleModel, PiBackedKeyStore, runScaffold, runVerify } from './agent_commands.js';
 import { createTerminalApprover } from './approver.js';
 import { SessionStore } from './session_store.js';
@@ -14,9 +15,16 @@ Usage:
       Check permission mode and provider/credential configuration.
       Makes no network call and spends nothing.
 
+  deepdive onboard <repo-url> [<dir>]
+      Clone a repository and pin the commit you will be graded against.
+      Starts Codebase Onboarding mode in that directory.
+
   deepdive grade <rubric> <artifact.json>
       Run the deterministic gate, then grade judged criteria with the model.
       Rubrics: ${Object.keys(CLI_RUBRICS).join(', ')}
+      rsdd citations are checked against the cloned repo at the pinned commit
+      before any model call, so a citation to a file that does not exist is
+      free to reject.
 
   deepdive history
       Show every round recorded for this project, oldest first.
@@ -36,6 +44,9 @@ Permission modes:
   Policy always applies. Approval can only narrow what policy permits, so no
   answer at a prompt can authorise a write into a graded artifact.
   Set DEEPDIVE_PERMISSION_MODE to change the default.
+
+  In an onboarding workspace, running the cloned repository's test suite is
+  confirmed separately and --auto does not answer it.
 
 Configuration is read from the environment. Load a .env file with Node's own
 loader, which keeps the key out of your shell history:
@@ -117,6 +128,55 @@ const defaultIo: CliIo = {
   err: (line) => process.stderr.write(`${line}\n`),
 };
 
+/**
+ * Opens the project store, appends one round, and closes it.
+ *
+ * Every command records through here so none can forget to close the database
+ * or invent its own path for the history file.
+ */
+function recordRoundFor(
+  projectDir: string,
+  io: CliIo,
+  input: Parameters<SessionStore['recordRound']>[0],
+): void {
+  const store = new SessionStore({ projectDir });
+  try {
+    const round = store.recordRound(input);
+    io.out(`\nsaved as round ${round.roundNumber} (${store.dbPath})`);
+  } finally {
+    store.close();
+  }
+}
+
+/**
+ * Confirms that the student accepts running a third-party repository's code.
+ *
+ * An onboarding workspace is a clone of someone else's project, and `scaffold`
+ * and `verify` both hold `bash`. Running its test suite executes whatever that
+ * repository's scripts do, with the student's own file access — a materially
+ * different risk from running tests they wrote themselves, and one `--auto`
+ * would otherwise pass over in silence. There is no OS sandbox at the moment,
+ * so an informed decision is the whole of the protection: this asks once per
+ * command, and `--auto` does not answer it.
+ */
+async function confirmThirdPartyCode(
+  workspace: string,
+  repoUrl: string,
+  io: CliIo,
+): Promise<boolean> {
+  io.out('');
+  io.out(`${workspace} is a clone of ${repoUrl}.`);
+  io.out('Running its test suite executes that repository\'s code on this machine.');
+  io.out('There is no OS sandbox — it runs with your file access.');
+
+  return createTerminalApprover()({
+    role: 'this workspace',
+    toolName: 'bash',
+    args: { workspace, repoUrl },
+    summary: `run code from ${repoUrl}`,
+  });
+}
+
 /** Returns a process exit code rather than calling process.exit, so it is testable. */
 export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<number> {
   const { projectDir, rest: withoutProject } = parseProjectDir(argv);
@@ -135,6 +195,18 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       return report.ok ? 0 : 1;
     }
 
+    if (command === 'onboard') {
+      const [repoUrl, dir] = rest;
+      if (!repoUrl) {
+        io.err('Usage: deepdive onboard <repo-url> [<dir>]');
+        return 1;
+      }
+
+      const result = await runOnboard(repoUrl, dir ?? projectDir);
+      for (const line of result.lines) io.out(line);
+      return 0;
+    }
+
     if (command === 'grade') {
       const [rubricName, artifactPath] = rest;
       if (!rubricName || !artifactPath) {
@@ -145,6 +217,25 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       const raw = await readFile(artifactPath, 'utf8');
       const payload = JSON.parse(raw) as Record<string, unknown>;
 
+      // A reverse SDD is a claim about a repository, so its citations are
+      // checked against that repository before anything else. This is the same
+      // deterministic-first principle as the gate (D-1), extended to evidence
+      // the gate cannot reach: a fabricated citation costs no model call.
+      if (rubricName === 'rsdd') {
+        const citations = await verifyRsddCitations(payload, projectDir);
+        for (const line of citations.lines) io.out(line);
+        if (!citations.passed) {
+          recordRoundFor(projectDir, io, {
+            phaseId: CLI_RUBRICS[rubricName]!.phaseId,
+            status: 'revise',
+            artifactType: rubricName,
+            artifactPayload: payload,
+            findings: citations.findings,
+          });
+          return 1;
+        }
+      }
+
       // Same pi-aware resolution the agent roles use, so the Grader cannot end
       // up authenticating from a different source than scaffold/verify.
       const provider = createModelProvider(undefined, new PiBackedKeyStore());
@@ -153,20 +244,14 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
 
       // Record the submission whatever the outcome. A rejected round is the
       // part worth keeping: it is the record of what changed between attempts.
-      const store = new SessionStore({ projectDir });
-      try {
-        const round = store.recordRound({
-          phaseId: CLI_RUBRICS[rubricName]!.phaseId,
-          status: result.verdict?.verdict ?? 'revise',
-          artifactType: rubricName,
-          artifactPayload: payload,
-          findings: result.findings,
-          verdictPayload: result.verdict,
-        });
-        io.out(`\nsaved as round ${round.roundNumber} (${store.dbPath})`);
-      } finally {
-        store.close();
-      }
+      recordRoundFor(projectDir, io, {
+        phaseId: CLI_RUBRICS[rubricName]!.phaseId,
+        status: result.verdict?.verdict ?? 'revise',
+        artifactType: rubricName,
+        artifactPayload: payload,
+        findings: result.findings,
+        verdictPayload: result.verdict,
+      });
 
       // A submission needing revision exits non-zero so the result is visible
       // to a script or a pre-commit hook, not only to a reader. "approved" is
@@ -207,6 +292,13 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
         return 1;
       }
 
+      // Asked before the model is built, so declining costs nothing.
+      const onboarding = readOnboardingConfig(workspace);
+      if (onboarding && !(await confirmThirdPartyCode(workspace, onboarding.repoUrl, io))) {
+        io.err('declined — not running third-party code.');
+        return 1;
+      }
+
       const approval: ApprovalOptions = { mode, approver: createTerminalApprover() };
       io.out(`permission mode: ${mode}`);
 
@@ -223,25 +315,19 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       // recording is the same thing that makes a graded round worth recording —
       // history that shows whether the tests were ever scaffolded and whether
       // the Verifier's findings were acted on between attempts.
-      const store = new SessionStore({ projectDir });
-      try {
-        const round = store.recordRound({
-          phaseId: AGENT_PHASE_IDS[command],
-          status: 'completed',
-          artifactType: command,
-          roleId: result.role,
-          artifactPayload: {
-            workspace,
-            instruction,
-            permissionMode: mode,
-            tools: result.tools,
-            summary: result.finalText,
-          },
-        });
-        io.out(`\nsaved as round ${round.roundNumber} (${store.dbPath})`);
-      } finally {
-        store.close();
-      }
+      recordRoundFor(projectDir, io, {
+        phaseId: AGENT_PHASE_IDS[command],
+        status: 'completed',
+        artifactType: command,
+        roleId: result.role,
+        artifactPayload: {
+          workspace,
+          instruction,
+          permissionMode: mode,
+          tools: result.tools,
+          summary: result.finalText,
+        },
+      });
 
       return 0;
     }

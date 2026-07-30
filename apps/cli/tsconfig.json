@@ -12,6 +12,8 @@
     { "path": "../../packages/content" },
     { "path": "../../packages/engine" },
     { "path": "../../packages/provider" },
-    { "path": "../../packages/policy" }
+    { "path": "../../packages/policy" },
+    { "path": "../../packages/onboarding" },
+    { "path": "../../packages/vcs" }
   ]
 }

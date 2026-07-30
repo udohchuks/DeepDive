@@ -10,6 +10,7 @@ import {
   HINT_LEVEL_RULES,
   L4_PROCEDURAL_CEILING,
   checkStruggleThreshold,
+  runCodeCheck,
 } from '../src/index.js';
 import { RubricDefinitionSchema } from '@deepdive/core';
 
@@ -64,5 +65,30 @@ describe('Content Assets & Golden Snapshots (Phase 4.1)', () => {
     expect(SddRubric).toMatchSnapshot();
     expect(RsddRubric).toMatchSnapshot();
     expect(CddRubric).toMatchSnapshot();
+  });
+});
+
+describe('code checks that used to pass everything', () => {
+  it('check_cdd_target_citations rejects a proposal that names no file', () => {
+    // The old condition was `Array.isArray(x) || typeof payload === 'object'`,
+    // whose right-hand side is true for every payload — it could not fail.
+    expect(runCodeCheck('check_cdd_target_citations', {}).passed).toBe(false);
+    expect(runCodeCheck('check_cdd_target_citations', { targetFiles: [] }).passed).toBe(false);
+    expect(
+      runCodeCheck('check_cdd_target_citations', { targetFiles: [{ filePath: 'src/a.ts' }] }).passed,
+    ).toBe(true);
+  });
+
+  it('check_repo_citations requires every module to cite code with line numbers', () => {
+    const mod = (citations?: unknown) => ({ modules: [{ name: 'auth', citations }] });
+
+    expect(runCodeCheck('check_repo_citations', mod(undefined)).passed).toBe(false);
+    expect(runCodeCheck('check_repo_citations', mod([])).passed).toBe(false);
+    // A whole-file citation is not evidence of having read the code.
+    expect(runCodeCheck('check_repo_citations', mod([{ filePath: 'a.ts' }])).passed).toBe(false);
+    expect(
+      runCodeCheck('check_repo_citations', mod([{ filePath: 'a.ts', lineStart: 1, lineEnd: 9 }]))
+        .passed,
+    ).toBe(true);
   });
 });

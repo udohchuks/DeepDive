@@ -6,3 +6,4 @@ export * from './cli.js';
 export * from './approver.js';
 export * from './agent_commands.js';
 export * from './session_store.js';
+export * from './onboarding_commands.js';

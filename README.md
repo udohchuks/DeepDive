@@ -21,7 +21,7 @@ node --env-file=.env node_modules/.bin/deepdive doctor
 
 `doctor` makes no network call and spends nothing. It should end with `Ready.`
 
-Then work through a project:
+Then work through a project. **Greenfield** — you design and build your own:
 
 ```bash
 # 1. Grade your project charter (exits non-zero until approved)
@@ -43,6 +43,31 @@ deepdive history
 Each `grade` is saved to `<project>/.deepdive/deepdive.db`. Rounds are append-only, so a rejected attempt stays in the record next to the approved one — that history is the point.
 
 Steps 3 and 4 ask before each mutating command by default. Add `--auto` to let the path/command policy decide silently. Policy denials are never negotiable in either mode — no answer at a prompt lets the AI write a graded artifact.
+
+**Codebase Onboarding** — you learn and contribute to an existing repository:
+
+```bash
+# 1. Clone the repo and pin the commit you will be graded against
+deepdive onboard https://github.com/some/project.git ./study
+
+# 2. Grade your charter, then your reverse SDD: what the code actually does
+deepdive grade charter ./charter.json --project ./study
+deepdive grade rsdd ./rsdd.json --project ./study
+
+# 3. Propose a contribution
+deepdive grade cdd ./cdd.json --project ./study
+```
+
+The commit is pinned at clone time, not resolved per submission: upstream moves, and evidence checked against a moving target would pass one day and fail the next with your work unchanged.
+
+Every citation in an `rsdd` is checked against that commit with git *before* any model call. A citation naming a file that does not exist is rejected for free — that check is the point of the mode, since the claim being graded is that you read the code:
+
+```
+citation check: FAILED — no model call made
+  - no such file at 97f38e88: validator → src/totally-invented.ts
+```
+
+Note the asymmetry with greenfield: an onboarding workspace holds **someone else's code**, and `scaffold`/`verify` hold `bash`, so running its test suite executes that code with your file access. DeepDive has no OS sandbox right now, so it asks before doing that — once per command, and `--auto` does not answer it. Declining is the default for a non-interactive stdin.
 
 ## Monorepo Layout
 
@@ -89,6 +114,8 @@ Greenfield mode is runnable end to end from the CLI: charter → SDD → scaffol
 
 Every command that produces a result records a round: `grade` under the rubric's phase, `scaffold` under phase C and `verify` under phase D. An agent run has no verdict — no rubric judged it — so it is recorded with status `completed` and tagged with the role that ran it. `history` shows all of them in one sequence, which is the point: it puts a verify run between the rejected charter and the approved one, where it happened.
 
-Not yet wired: Codebase Onboarding has phase controllers but no CLI command, and the VS Code extension is not yet a loadable extension. Onboarding will need process isolation restored before it ships, since it runs a cloned third-party repository's test suite.
+Codebase Onboarding is runnable from the CLI: `onboard` clones and pins, and `grade rsdd` / `grade cdd` are wired with repo-grounded citation checking. Running a cloned repository's test suite is gated on an explicit prompt rather than an OS sandbox — that is a deliberate, stated trade-off, not a finished isolation story, and process isolation is still the right answer before this is put in front of students who will paste in arbitrary repository URLs.
 
-Not yet published: the packages declare `files`, pinned `engines` and public `publishConfig`, and `npm pack` includes the migration SQL the built runner resolves at run time. No `LICENSE` has been chosen yet, which is the remaining blocker on a first `npm publish`.
+Not yet wired: the VS Code extension is not a loadable extension. Phases OB-C, OB-D, OB-F and OB-G have validators but no CLI command, so the onboarding path currently covers the charter, the reverse SDD and the contribution proposal, not the guided reading plan or the quiz.
+
+Licensed MIT. Packages declare `files`, pinned `engines` and public `publishConfig`, and `npm pack` includes the migration SQL the built runner resolves at run time, so `npm publish --workspaces` is unblocked.
