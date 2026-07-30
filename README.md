@@ -42,6 +42,37 @@ deepdive history
 
 Each `grade` is saved to `<project>/.deepdive/deepdive.db`. Rounds are append-only, so a rejected attempt stays in the record next to the approved one — that history is the point.
 
+### The studio
+
+`deepdive studio` is the consistency view — what a streak counter is for, applied to design rounds rather than commits:
+
+```
+DeepDive studio — ./my-project
+
+  Rounds            6
+  Approved          3 of 6
+  Active days       1
+  Current streak    1d
+  Longest streak    1d
+  Peak hour         12pm
+  Hints taken       0
+  Concepts mastered 0 of 2
+
+  onboarding:  ● OB-A   ● OB-B   ● OB-C   ○ OB-D   ○ OB-E   ○ OB-F   ○ OB-G
+
+  Mon                        
+  Tue                        
+  Wed                        
+  Thu                       █
+  Fri                        
+  …
+      12 weeks    less · ▪ ▣ █ more
+```
+
+Effort and outcome are deliberately kept apart. Rounds and active days say you turned up; approvals say the work landed. Collapsing them into one score would make a day of hard revision look like a bad day, which is the opposite of what this is for. A streak that ended yesterday still counts as live, so it does not read as broken every morning before your first submission.
+
+Scope is per project, like everything else — the numbers come from that project's `.deepdive/deepdive.db`. There is no cross-project roll-up.
+
 ### When you get stuck
 
 If the same field is flagged on two consecutive rounds, `grade` says so and points at `deepdive hint`. Hints climb a four-rung ladder — Orientation, Localization, Diagnostic, Procedural Nudge — one rung per command, each generated at the moment you ask for it:

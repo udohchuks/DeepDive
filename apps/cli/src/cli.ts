@@ -1,5 +1,5 @@
-import { readFile } from 'fs/promises';
 import { createModelProvider } from '@deepdive/provider';
+import { assertWorkspace, loadArtifact } from './artifact_input.js';
 import { buildDoctorReport } from './doctor.js';
 import { CITATION_CRITERION, CLI_RUBRICS, ONBOARDING_RUBRICS, runGrade } from './grade.js';
 import { readOnboardingConfig, runOnboard, verifyRepoCitations } from './onboarding_commands.js';
@@ -26,6 +26,7 @@ import {
   buildHintProfile,
 } from './hints.js';
 import { HintLevel, QuizItem } from '@deepdive/core';
+import { renderStudio } from './studio.js';
 import { buildRoleModel, PiBackedKeyStore, runScaffold, runVerify } from './agent_commands.js';
 import { createTerminalApprover } from './approver.js';
 import { SessionStore } from './session_store.js';
@@ -65,6 +66,10 @@ Usage:
       Reveal the next rung of the hint ladder for your latest open round.
       Unlimited, and logged rather than penalised. L4 is the ceiling: no
       level ever gives you the answer.
+
+  deepdive studio
+      Consistency and progress at a glance: rounds, active days, streaks,
+      phase progress and a twelve-week heatmap.
 
   deepdive history
       Show every round recorded for this project, oldest first.
@@ -138,8 +143,15 @@ export function parseProjectDir(
   let projectDir: string | undefined;
 
   for (let i = 0; i < argv.length; i += 1) {
-    if (argv[i] === '--project' && i + 1 < argv.length) {
-      projectDir = argv[i + 1];
+    if (argv[i] === '--project') {
+      // Falling back to the current directory here would silently write one
+      // project's history into another — the failure would be invisible until
+      // `history` came back empty in the directory that should have had it.
+      const value = argv[i + 1];
+      if (!value || value.startsWith('--')) {
+        throw new Error('--project needs a directory: deepdive <command> --project <dir>');
+      }
+      projectDir = value;
       i += 1;
     } else {
       rest.push(argv[i]!);
@@ -255,7 +267,15 @@ async function confirmThirdPartyCode(
 
 /** Returns a process exit code rather than calling process.exit, so it is testable. */
 export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<number> {
-  const { projectDir, rest: withoutProject } = parseProjectDir(argv);
+  let projectDir: string;
+  let withoutProject: string[];
+  try {
+    ({ projectDir, rest: withoutProject } = parseProjectDir(argv));
+  } catch (err: unknown) {
+    io.err(`error: ${err instanceof Error ? err.message : String(err)}`);
+    return 1;
+  }
+
   const [command, ...rest] = withoutProject;
 
   if (!command || command === 'help' || command === '--help' || command === '-h') {
@@ -290,8 +310,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
         return 1;
       }
 
-      const raw = await readFile(artifactPath, 'utf8');
-      const payload = JSON.parse(raw) as Record<string, unknown>;
+      const payload = await loadArtifact(artifactPath);
 
       // A reverse SDD is a claim about a repository, so its citations are
       // checked against that repository before anything else. This is the same
@@ -354,8 +373,31 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       return result.verdict?.verdict === 'approved' ? 0 : 1;
     }
 
+    if (command === 'studio') {
+      const store = new SessionStore({ projectDir, mustExist: true });
+      try {
+        const rounds = store.history();
+        const hintsTaken = store
+          .hintProfileSource()
+          .reduce((total, entry) => total + entry.hints.length, 0);
+
+        for (const line of renderStudio({
+          projectDir,
+          rounds,
+          mastery: store.masteryStates(),
+          hintsTaken,
+          now: new Date(),
+        })) {
+          io.out(line);
+        }
+        return 0;
+      } finally {
+        store.close();
+      }
+    }
+
     if (command === 'history') {
-      const store = new SessionStore({ projectDir });
+      const store = new SessionStore({ projectDir, mustExist: true });
       try {
         const rounds = store.history();
         if (rounds.length === 0) {
@@ -379,9 +421,14 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
     }
 
     if (command === 'hint') {
-      const requested = rest.find((arg) => HINT_LADDER.includes(arg as HintLevel)) as
-        | HintLevel
-        | undefined;
+      // A typo like "L9" must not be read as "no level requested", which would
+      // quietly reveal L1 instead of saying the argument was wrong.
+      const levelArg = rest.find((arg) => /^l\d+$/i.test(arg));
+      if (levelArg && !HINT_LADDER.includes(levelArg.toUpperCase() as HintLevel)) {
+        io.err(`Unknown hint level "${levelArg}". The ladder is ${HINT_LADDER.join(', ')}.`);
+        return 1;
+      }
+      const requested = levelArg?.toUpperCase() as HintLevel | undefined;
 
       const store = new SessionStore({ projectDir });
       let generated;
@@ -442,6 +489,8 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
         io.err(`Unknown framework "${framework}". One of: ${TEST_FRAMEWORKS.join(', ')}`);
         return 1;
       }
+
+      assertWorkspace(workspace);
 
       const onboarding = readOnboardingConfig(workspace);
       if (onboarding && !(await confirmThirdPartyCode(workspace, onboarding.repoUrl, io))) {
@@ -606,6 +655,10 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
         io.err(`Usage: deepdive ${command} [--auto|--approve] <workspace> <instruction>`);
         return 1;
       }
+
+      // Checked before the model is built, so a typo'd path costs nothing and
+      // is reported as itself rather than as a missing API key.
+      assertWorkspace(workspace);
 
       // Asked before the model is built, so declining costs nothing.
       const onboarding = readOnboardingConfig(workspace);

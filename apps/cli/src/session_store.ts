@@ -15,6 +15,7 @@ import {
 import {
   Clock,
   Finding,
+  CompletionRecord,
   Hint,
   HintLevel,
   MasteryState,
@@ -44,6 +45,23 @@ export interface SessionStoreOptions {
   projectName?: string;
   clock?: Clock;
   idGenerator?: IdGenerator;
+  /**
+   * Refuse to create the database if it does not already exist.
+   *
+   * Read-only commands pass this. `deepdive history` in an unrelated directory
+   * used to leave a `.deepdive` folder behind, so looking at a project marked
+   * the filesystem — and worse, a typo'd `--project` silently created a second,
+   * empty project rather than saying the first one was not there.
+   */
+  mustExist?: boolean;
+}
+
+/** Thrown when a read-only command is pointed at a directory with no history. */
+export class NoProjectHistoryError extends Error {
+  constructor(projectDir: string) {
+    super(`No DeepDive history in ${path.resolve(projectDir)}.`);
+    this.name = 'NoProjectHistoryError';
+  }
 }
 
 /**
@@ -115,6 +133,11 @@ export class SessionStore {
     this.ids = options.idGenerator ?? new CryptoIdGenerator();
 
     this.dbPath = resolveDbPath(options.projectDir);
+
+    if (options.mustExist && !fs.existsSync(this.dbPath)) {
+      throw new NoProjectHistoryError(options.projectDir);
+    }
+
     fs.mkdirSync(path.dirname(this.dbPath), { recursive: true });
 
     this.db = createDbConnection(this.dbPath);
@@ -258,6 +281,21 @@ export class SessionStore {
     }
 
     return null;
+  }
+
+  /**
+   * Files the completion record in its own table, not only on disk.
+   *
+   * `completion.json` beside the project is the copy a student can show
+   * someone; this is the copy that cannot be edited without the stored hash
+   * disagreeing with it.
+   */
+  saveCompletion(record: CompletionRecord): void {
+    this.quizzes.saveCompletionRecord(record);
+  }
+
+  completion(): CompletionRecord | null {
+    return this.quizzes.getCompletionRecord(this.projectId);
   }
 
   /** Every question banked for this project, across all sessions. */
