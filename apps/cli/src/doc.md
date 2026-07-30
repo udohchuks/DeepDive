@@ -35,14 +35,20 @@ node_modules/.bin/deepdive doctor
 Run the tool-using roles against a workspace (both require a working sandbox):
 
 ```bash
+# asks before each write/edit/bash (default)
 deepdive scaffold ./workspace "add a failing test for the queue"
-deepdive verify   ./workspace "check the queue implementation against the spec"
+
+# policy decides, nothing is asked
+deepdive verify --auto ./workspace "check the queue against the spec"
 ```
 
 ## Constraints & gotchas
 - **`grade` spends money.** It issues a real model call at temperature 0 against the pinned model whenever the deterministic gate passes and the rubric has judged criteria. `doctor` never does.
 - The sandbox preflight is fail-closed. On Windows it requires **both** WSL2 and bubblewrap inside it; `doctor` reports `unsupported` with remediation text rather than silently running unsandboxed.
-- `scaffold` and `verify` run tool-using roles against a real workspace, so they check the sandbox **before** resolving credentials and refuse to run when it is unavailable. There is no unsandboxed fallback.
+- **Permission modes replace mandatory sandboxing for the student's own code.** `--approve` (default) asks before each mutating command; `--auto` lets policy decide silently. Read-only tools never prompt — prompting on every `read` trains people to approve without looking. `DEEPDIVE_PERMISSION_MODE` sets the default; an explicit flag wins, and an unrecognised value is ignored rather than trusted.
+- **Approval can only narrow what policy permits, never widen it.** The path and command policies run first and their denials are never offered for approval, so no answer at a prompt can authorise a write into a graded artifact (P-2) or let the Verifier mutate the repository. Verified end to end: `scaffold --auto` asked to write `sdd.json` produces no such file.
+- **A non-interactive stdin is never consent.** With no TTY (a pipe, CI), the approver returns "declined" rather than blocking forever or assuming yes.
+- The sandbox is still required for **Codebase Onboarding**, where DeepDive clones an arbitrary repository and runs its suite — `npm install` alone executes postinstall scripts from a stranger, and no approval prompt makes that safe. `doctor` reports a missing sandbox as advisory rather than fatal.
 - **Authentication is pi's.** Credentials resolve environment first, then pi's own login store (`pi login`), so a student who has authenticated pi once needs no `.env` at all. Environment configuration wins so a project-local `.env` stays predictable and a stale global login can be overridden without logging out of pi. The CLI resolves this **once** and hands the result to every role, so the Grader and the agent roles can never authenticate from different sources. Each provider reads only its own variables — pi enforces the same scoping internally, so no credential is offered to an endpoint it was not issued for.
 - **OAuth is partial.** `pi login` with Anthropic OAuth (a Claude subscription rather than an API key) drives `scaffold` and `verify`, because pi's `ModelRuntime` resolves and refreshes the token. It does **not** drive `grade`: the Grader issues a direct pi-ai call that takes an API key, not a refreshable token. `doctor` says so explicitly rather than letting it fail at the provider.
 - An explicitly supplied key is installed as pi's *non-persistent* runtime credential, so it is used for that process only and never written into pi's `auth.json`.

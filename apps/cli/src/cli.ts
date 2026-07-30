@@ -2,13 +2,9 @@ import { readFile } from 'fs/promises';
 import { createModelProvider } from '@deepdive/provider';
 import { buildDoctorReport } from './doctor.js';
 import { CLI_RUBRICS, runGrade } from './grade.js';
-import {
-  assertSandboxAvailable,
-  buildRoleModel,
-  PiBackedKeyStore,
-  runScaffold,
-  runVerify,
-} from './agent_commands.js';
+import { buildRoleModel, PiBackedKeyStore, runScaffold, runVerify } from './agent_commands.js';
+import { createTerminalApprover } from './approver.js';
+import { ApprovalOptions, isPermissionMode, PermissionMode } from '@deepdive/agent';
 
 export const USAGE = `deepdive — guided project learning, run locally
 
@@ -21,18 +17,54 @@ Usage:
       Run the deterministic gate, then grade judged criteria with the model.
       Rubrics: ${Object.keys(CLI_RUBRICS).join(', ')}
 
-  deepdive scaffold <workspace> <instruction>
+  deepdive scaffold [--auto|--approve] <workspace> <instruction>
       Run the Scaffolder against a workspace (write/edit/bash, path-scoped).
-      Cannot write graded artifacts. Requires a working sandbox.
+      Cannot write graded artifacts, in any mode.
 
-  deepdive verify <workspace> <instruction>
-      Run the Verifier against a workspace (read-only). Requires a sandbox.
+  deepdive verify [--auto|--approve] <workspace> <instruction>
+      Run the Verifier against a workspace (read-only).
+
+Permission modes:
+  --approve   (default) ask before each mutating command; reads run freely
+  --auto      policy decides, nothing is asked
+
+  Policy always applies. Approval can only narrow what policy permits, so no
+  answer at a prompt can authorise a write into a graded artifact.
+  Set DEEPDIVE_PERMISSION_MODE to change the default.
 
 Configuration is read from the environment. Load a .env file with Node's own
 loader, which keeps the key out of your shell history:
 
   node --env-file=.env node_modules/.bin/deepdive doctor
 `;
+
+/**
+ * Extracts the permission mode from argv.
+ *
+ * Defaults to `approve`: the safe mode is the one you get by forgetting to
+ * choose. `DEEPDIVE_PERMISSION_MODE` sets a default for people who have already
+ * decided, and an explicit flag still wins over it.
+ */
+export function parsePermissionMode(
+  argv: string[],
+  env: NodeJS.ProcessEnv = process.env,
+): { mode: PermissionMode; rest: string[] } {
+  const rest: string[] = [];
+  let mode: PermissionMode | undefined;
+
+  for (const arg of argv) {
+    if (arg === '--auto') mode = 'auto';
+    else if (arg === '--approve') mode = 'approve';
+    else rest.push(arg);
+  }
+
+  if (!mode) {
+    const fromEnv = env.DEEPDIVE_PERMISSION_MODE;
+    if (fromEnv && isPermissionMode(fromEnv)) mode = fromEnv;
+  }
+
+  return { mode: mode ?? 'approve', rest };
+}
 
 export interface CliIo {
   out: (line: string) => void;
@@ -80,22 +112,22 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
     }
 
     if (command === 'scaffold' || command === 'verify') {
-      const [workspace, ...instructionParts] = rest;
+      const { mode, rest: positional } = parsePermissionMode(rest);
+      const [workspace, ...instructionParts] = positional;
       const instruction = instructionParts.join(' ');
       if (!workspace || !instruction) {
-        io.err(`Usage: deepdive ${command} <workspace> <instruction>`);
+        io.err(`Usage: deepdive ${command} [--auto|--approve] <workspace> <instruction>`);
         return 1;
       }
 
-      // Check the sandbox before building a model runtime: if the role cannot
-      // run at all, say so immediately rather than after resolving credentials.
-      assertSandboxAvailable();
+      const approval: ApprovalOptions = { mode, approver: createTerminalApprover() };
+      io.out(`permission mode: ${mode}`);
 
       const model = await buildRoleModel();
       const result =
         command === 'scaffold'
-          ? await runScaffold(workspace, instruction, model)
-          : await runVerify(workspace, instruction, model);
+          ? await runScaffold(workspace, instruction, model, approval)
+          : await runVerify(workspace, instruction, model, approval);
 
       for (const line of result.lines) io.out(line);
       return 0;

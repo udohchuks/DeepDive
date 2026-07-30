@@ -4,6 +4,7 @@ import {
   createScaffolderSession,
   createVerifierSession,
   resolveProviderCredential,
+  ApprovalOptions,
   RoleModel,
 } from '@deepdive/agent';
 import { PathPolicyEvaluator, runPreflight } from '@deepdive/sandbox';
@@ -13,7 +14,7 @@ export class SandboxUnavailableError extends Error {
   constructor(status: string, remediation?: string) {
     super(
       `Sandbox is not available on this machine (${status}). ` +
-        `The Scaffolder and Verifier execute tools against a real workspace, so they do not run unsandboxed.\n` +
+        `Running a third-party repository's test suite executes code you did not write, so it requires real isolation.\n` +
         (remediation ?? ''),
     );
     this.name = 'SandboxUnavailableError';
@@ -71,11 +72,17 @@ export class PiBackedKeyStore implements KeyStore {
 }
 
 /**
- * Refuses to build a tool-using session when the sandbox is unavailable.
+ * Requires OS-level isolation before executing code the student did not write.
  *
- * This is the no-unsandboxed-fallback rule applied at the entry point rather
- * than deep in the stack, so the failure names the missing facility and how to
- * get it instead of surfacing later as a confusing tool error.
+ * This is deliberately *not* called for scaffold/verify against the student's
+ * own project. Those are authorised the way Claude Code authorises them — a
+ * path/command policy that cannot be overridden, plus the student approving
+ * each mutating command — and demanding a VM to edit your own files was
+ * complexity without a matching risk.
+ *
+ * It remains required for Codebase Onboarding, where DeepDive clones an
+ * arbitrary repository and runs its suite: `npm install` alone executes
+ * postinstall scripts from a stranger, and no approval prompt makes that safe.
  */
 export function assertSandboxAvailable(): void {
   const preflight = runPreflight();
@@ -110,15 +117,15 @@ export async function runScaffold(
   workspace: string,
   instruction: string,
   model: RoleModel,
+  approval: ApprovalOptions,
 ): Promise<AgentRunResult> {
-  assertSandboxAvailable();
-
   const evaluator = workspacePolicy(workspace, DEFAULT_GRADED_ARTIFACTS);
   const session = await createScaffolderSession(
     evaluator,
     DEFAULT_GRADED_ARTIFACTS,
     model,
     path.resolve(workspace),
+    approval,
   );
 
   await session.prompt(instruction);
@@ -139,10 +146,9 @@ export async function runVerify(
   workspace: string,
   instruction: string,
   model: RoleModel,
+  approval: ApprovalOptions,
 ): Promise<AgentRunResult> {
-  assertSandboxAvailable();
-
-  const session = await createVerifierSession(model, path.resolve(workspace));
+  const session = await createVerifierSession(model, path.resolve(workspace), approval);
   await session.prompt(instruction);
 
   return {

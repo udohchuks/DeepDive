@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { ModelProvider, ModelRequestOptions } from '@deepdive/core';
-import { runCli, CliIo } from '../src/cli.js';
+import { runCli, CliIo, parsePermissionMode } from '../src/cli.js';
+import { createTerminalApprover } from '../src/approver.js';
 import { buildDoctorReport } from '../src/doctor.js';
 import { runGrade, GraderVerdictSchema, CLI_RUBRICS } from '../src/grade.js';
 import {
@@ -118,11 +119,59 @@ describe('deepdive CLI', () => {
     for (const command of ['scaffold', 'verify']) {
       const io = captureIo();
       expect(await runCli([command, './workspace'], io)).toBe(1);
-      expect(io.errors.join('\n')).toContain(`deepdive ${command} <workspace> <instruction>`);
+      expect(io.errors.join('\n')).toContain(`deepdive ${command}`);
+      expect(io.errors.join('\n')).toContain('<workspace> <instruction>');
     }
   });
 
-  it('PROTECTED INVARIANT: tool-using roles refuse to run without a sandbox', () => {
+  it('defaults to approve mode when no flag or env is given', () => {
+    // The safe mode must be the one you get by forgetting to choose.
+    const parsed = parsePermissionMode(['./ws', 'do a thing'], {} as NodeJS.ProcessEnv);
+    expect(parsed.mode).toBe('approve');
+    expect(parsed.rest).toEqual(['./ws', 'do a thing']);
+  });
+
+  it('accepts --auto and --approve, and strips them from the operands', () => {
+    expect(parsePermissionMode(['--auto', './ws'], {} as NodeJS.ProcessEnv)).toEqual({
+      mode: 'auto',
+      rest: ['./ws'],
+    });
+    expect(parsePermissionMode(['--approve', './ws'], {} as NodeJS.ProcessEnv)).toEqual({
+      mode: 'approve',
+      rest: ['./ws'],
+    });
+  });
+
+  it('an explicit flag overrides DEEPDIVE_PERMISSION_MODE', () => {
+    const env = { DEEPDIVE_PERMISSION_MODE: 'auto' } as NodeJS.ProcessEnv;
+    expect(parsePermissionMode([], env).mode).toBe('auto');
+    expect(parsePermissionMode(['--approve'], env).mode).toBe('approve');
+  });
+
+  it('ignores an unrecognised DEEPDIVE_PERMISSION_MODE rather than trusting it', () => {
+    const env = { DEEPDIVE_PERMISSION_MODE: 'bypass' } as NodeJS.ProcessEnv;
+    expect(parsePermissionMode([], env).mode).toBe('approve');
+  });
+
+  it('PROTECTED INVARIANT: a non-interactive stdin is never read as consent', async () => {
+    // Piped input or CI must not silently approve mutating commands.
+    const approver = createTerminalApprover();
+    const wasTty = process.stdin.isTTY;
+    try {
+      Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+      const approved = await approver({
+        role: 'scaffolder',
+        toolName: 'write',
+        args: { path: 'a.ts' },
+        summary: 'write: a.ts',
+      });
+      expect(approved).toBe(false);
+    } finally {
+      Object.defineProperty(process.stdin, 'isTTY', { value: wasTty, configurable: true });
+    }
+  });
+
+  it('sandbox is still required for running code the student did not write', () => {
     const preflight = runPreflight();
     if (preflight.isSupported) {
       expect(() => assertSandboxAvailable()).not.toThrow();
@@ -130,7 +179,7 @@ describe('deepdive CLI', () => {
     }
     // Fail-closed: no unsandboxed fallback exists for roles that execute tools.
     expect(() => assertSandboxAvailable()).toThrow(SandboxUnavailableError);
-    expect(() => assertSandboxAvailable()).toThrow(/do not run unsandboxed/);
+    expect(() => assertSandboxAvailable()).toThrow(/requires real isolation/);
   });
 
   it('role sessions use the same pinned model as the Grader, not a separate one', () => {

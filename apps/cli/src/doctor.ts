@@ -22,12 +22,20 @@ export function buildDoctorReport(env: NodeJS.ProcessEnv = process.env): DoctorR
   const lines: string[] = [];
   let ok = true;
 
+  // The sandbox is required only for running code the student did not write
+  // (Codebase Onboarding). Scaffolding and verifying your own project are
+  // authorised by policy plus approval, so a missing sandbox is reported
+  // without failing the check.
   const preflight = runPreflight();
   lines.push(`sandbox      : ${preflight.status} (${preflight.facilityName})`);
   if (!preflight.isSupported) {
-    ok = false;
+    lines.push('               not required for greenfield scaffold/verify.');
+    lines.push('               needed to run a cloned repository\'s tests (onboarding mode):');
     lines.push(`               ${preflight.remediationText ?? 'no remediation text provided'}`);
   }
+
+  const mode = env.DEEPDIVE_PERMISSION_MODE ?? 'approve';
+  lines.push(`permissions  : ${mode}${env.DEEPDIVE_PERMISSION_MODE ? '' : ' (default)'}`);
 
   const requested = env.MODEL_PROVIDER ?? 'anthropic';
   lines.push(`provider     : ${requested}${env.MODEL_PROVIDER ? '' : ' (default)'}`);
