@@ -108,7 +108,11 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       const provider = createModelProvider(undefined, new PiBackedKeyStore());
       const result = await runGrade(rubricName, payload, provider);
       for (const line of result.lines) io.out(line);
-      return 0;
+
+      // A submission needing revision exits non-zero so the result is visible
+      // to a script or a pre-commit hook, not only to a reader. "approved" is
+      // the only success; a deterministic-gate failure is a failure too.
+      return result.verdict?.verdict === 'approved' ? 0 : 1;
     }
 
     if (command === 'scaffold' || command === 'verify') {

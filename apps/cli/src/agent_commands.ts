@@ -64,6 +64,52 @@ export interface AgentRunResult {
   lines: string[];
 }
 
+interface MaybeMessage {
+  role?: string;
+  content?: unknown;
+}
+
+/**
+ * Extracts readable text from the session's final assistant message.
+ *
+ * Without this the commands reported only a message count, which told the
+ * student nothing: the Verifier's findings — the entire reason to run it —
+ * were computed, paid for, and discarded.
+ *
+ * Content is either a plain string or an array of typed blocks depending on
+ * the provider, so both are handled and non-text blocks (tool calls) are
+ * skipped rather than stringified into noise.
+ */
+export function extractFinalText(messages: readonly unknown[]): string {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i] as MaybeMessage;
+    if (message?.role !== 'assistant') continue;
+
+    const { content } = message;
+    if (typeof content === 'string') {
+      if (content.trim()) return content.trim();
+      continue;
+    }
+
+    if (Array.isArray(content)) {
+      const text = content
+        .filter(
+          (block): block is { type: string; text: string } =>
+            typeof block === 'object' &&
+            block !== null &&
+            (block as { type?: unknown }).type === 'text' &&
+            typeof (block as { text?: unknown }).text === 'string',
+        )
+        .map((block) => block.text)
+        .join('')
+        .trim();
+      if (text) return text;
+    }
+  }
+
+  return '';
+}
+
 function workspacePolicy(workspace: string, gradedArtifactPaths: string[]): PathPolicyEvaluator {
   const root = path.resolve(workspace);
   return new PathPolicyEvaluator({
@@ -99,12 +145,17 @@ export async function runScaffold(
 
   await session.prompt(instruction);
 
-  return {
-    lines: [
-      `scaffolder: ${session.getActiveToolNames().join(', ')}`,
-      `messages  : ${session.messages.length}`,
-    ],
-  };
+  return { lines: renderRunOutput('scaffolder', session) };
+}
+
+function renderRunOutput(
+  role: string,
+  session: { getActiveToolNames(): string[]; messages: readonly unknown[] },
+): string[] {
+  const lines = [`${role}: ${session.getActiveToolNames().join(', ')}`, ''];
+  const text = extractFinalText(session.messages);
+  lines.push(text || '(the model returned no closing message)');
+  return lines;
 }
 
 /**
@@ -120,10 +171,5 @@ export async function runVerify(
   const session = await createVerifierSession(model, path.resolve(workspace), approval);
   await session.prompt(instruction);
 
-  return {
-    lines: [
-      `verifier  : ${session.getActiveToolNames().join(', ')}`,
-      `messages  : ${session.messages.length}`,
-    ],
-  };
+  return { lines: renderRunOutput('verifier', session) };
 }

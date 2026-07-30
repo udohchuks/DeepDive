@@ -5,7 +5,7 @@ import { runCli, CliIo, parsePermissionMode } from '../src/cli.js';
 import { createTerminalApprover } from '../src/approver.js';
 import { buildDoctorReport } from '../src/doctor.js';
 import { runGrade, GraderVerdictSchema, CLI_RUBRICS } from '../src/grade.js';
-import { resolveRoleModelConfig } from '../src/agent_commands.js';
+import { extractFinalText, resolveRoleModelConfig } from '../src/agent_commands.js';
 
 function captureIo(): CliIo & { lines: string[]; errors: string[] } {
   const lines: string[] = [];
@@ -64,6 +64,8 @@ describe('deepdive CLI', () => {
     expect(result.shortCircuited).toBe(true);
     expect(provider.calls).toHaveLength(0);
     expect(result.lines.join('\n')).toContain('no model call made');
+    // No verdict means not approved, which the CLI reports as a non-zero exit.
+    expect(result.verdict).toBeUndefined();
   });
 
   it('sends only judged criteria to the model once the gate passes', async () => {
@@ -102,6 +104,44 @@ describe('deepdive CLI', () => {
         provider,
       ),
     ).rejects.toThrow();
+  });
+
+  it('surfaces the final assistant text, not just a message count', () => {
+    // The commands used to print only `messages: N`, so the Verifier's findings
+    // — the whole reason to run it — were computed, paid for, and discarded.
+    const text = extractFinalText([
+      { role: 'user', content: 'check the tests' },
+      { role: 'assistant', content: [{ type: 'text', text: 'Gap: Worker has no tests.' }] },
+    ]);
+    expect(text).toBe('Gap: Worker has no tests.');
+  });
+
+  it('reads plain-string content and skips non-text blocks', () => {
+    expect(extractFinalText([{ role: 'assistant', content: 'plain reply' }])).toBe('plain reply');
+
+    const mixed = extractFinalText([
+      {
+        role: 'assistant',
+        content: [
+          { type: 'tool_use', name: 'write', input: {} },
+          { type: 'text', text: 'done' },
+        ],
+      },
+    ]);
+    expect(mixed).toBe('done');
+  });
+
+  it('falls back past a trailing tool-only message to the last real reply', () => {
+    const text = extractFinalText([
+      { role: 'assistant', content: [{ type: 'text', text: 'the real answer' }] },
+      { role: 'assistant', content: [{ type: 'tool_use', name: 'ls', input: {} }] },
+    ]);
+    expect(text).toBe('the real answer');
+  });
+
+  it('returns empty rather than throwing when there is no assistant message', () => {
+    expect(extractFinalText([])).toBe('');
+    expect(extractFinalText([{ role: 'user', content: 'hi' }])).toBe('');
   });
 
   it('exposes the rubrics the usage text advertises', () => {
