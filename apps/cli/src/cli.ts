@@ -4,6 +4,7 @@ import { buildDoctorReport } from './doctor.js';
 import { CLI_RUBRICS, runGrade } from './grade.js';
 import { buildRoleModel, PiBackedKeyStore, runScaffold, runVerify } from './agent_commands.js';
 import { createTerminalApprover } from './approver.js';
+import { SessionStore } from './session_store.js';
 import { ApprovalOptions, isPermissionMode, PermissionMode } from '@deepdive/agent';
 
 export const USAGE = `deepdive — guided project learning, run locally
@@ -16,6 +17,9 @@ Usage:
   deepdive grade <rubric> <artifact.json>
       Run the deterministic gate, then grade judged criteria with the model.
       Rubrics: ${Object.keys(CLI_RUBRICS).join(', ')}
+
+  deepdive history
+      Show every round recorded for this project, oldest first.
 
   deepdive scaffold [--auto|--approve] <workspace> <instruction>
       Run the Scaffolder against a workspace (write/edit/bash, path-scoped).
@@ -66,6 +70,33 @@ export function parsePermissionMode(
   return { mode: mode ?? 'approve', rest };
 }
 
+/**
+ * Extracts `--project <dir>`, defaulting to the current directory.
+ *
+ * One rule for every command: history belongs to the directory you run in.
+ * Deriving it from the artifact path for `grade` and the workspace for
+ * `scaffold` would put two projects' rounds in different places depending on
+ * which command wrote first.
+ */
+export function parseProjectDir(
+  argv: string[],
+  env: NodeJS.ProcessEnv = process.env,
+): { projectDir: string; rest: string[] } {
+  const rest: string[] = [];
+  let projectDir: string | undefined;
+
+  for (let i = 0; i < argv.length; i += 1) {
+    if (argv[i] === '--project' && i + 1 < argv.length) {
+      projectDir = argv[i + 1];
+      i += 1;
+    } else {
+      rest.push(argv[i]!);
+    }
+  }
+
+  return { projectDir: projectDir ?? env.DEEPDIVE_PROJECT_DIR ?? process.cwd(), rest };
+}
+
 export interface CliIo {
   out: (line: string) => void;
   err: (line: string) => void;
@@ -78,7 +109,8 @@ const defaultIo: CliIo = {
 
 /** Returns a process exit code rather than calling process.exit, so it is testable. */
 export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<number> {
-  const [command, ...rest] = argv;
+  const { projectDir, rest: withoutProject } = parseProjectDir(argv);
+  const [command, ...rest] = withoutProject;
 
   if (!command || command === 'help' || command === '--help' || command === '-h') {
     io.out(USAGE);
@@ -109,10 +141,51 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       const result = await runGrade(rubricName, payload, provider);
       for (const line of result.lines) io.out(line);
 
+      // Record the submission whatever the outcome. A rejected round is the
+      // part worth keeping: it is the record of what changed between attempts.
+      const store = new SessionStore({ projectDir });
+      try {
+        const round = store.recordRound({
+          phaseId: CLI_RUBRICS[rubricName]!.phaseId,
+          status: result.verdict?.verdict ?? 'revise',
+          artifactType: rubricName,
+          artifactPayload: payload,
+          findings: result.findings,
+          verdictPayload: result.verdict,
+        });
+        io.out(`\nsaved as round ${round.roundNumber} (${store.dbPath})`);
+      } finally {
+        store.close();
+      }
+
       // A submission needing revision exits non-zero so the result is visible
       // to a script or a pre-commit hook, not only to a reader. "approved" is
       // the only success; a deterministic-gate failure is a failure too.
       return result.verdict?.verdict === 'approved' ? 0 : 1;
+    }
+
+    if (command === 'history') {
+      const store = new SessionStore({ projectDir });
+      try {
+        const rounds = store.history();
+        if (rounds.length === 0) {
+          io.out(`No rounds recorded yet for ${projectDir}.`);
+          return 0;
+        }
+
+        io.out(`round history for ${projectDir}\n`);
+        for (const round of rounds) {
+          io.out(
+            `  ${String(round.roundNumber).padStart(3)}. [${round.status}] phase ${round.phaseId}  ${round.submittedAt}`,
+          );
+          for (const finding of round.findings) {
+            io.out(`       - ${finding.severity}: ${finding.code} on ${finding.targetFieldId}`);
+          }
+        }
+        return 0;
+      } finally {
+        store.close();
+      }
     }
 
     if (command === 'scaffold' || command === 'verify') {

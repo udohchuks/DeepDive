@@ -28,6 +28,7 @@ const roundRepo = new RoundRepository(db);
 ## Constraints & gotchas
 - Single-user local file database — no network sync layer.
 - `updateRound` and `deleteRound` calls fail at runtime to guarantee turn history immutability.
+- **Migrations resolve from the module, not the working directory.** The default was `<cwd>/packages/storage/src/migrations`, which only worked when the process started at the repo root; any other consumer — notably the `deepdive` CLI run inside a student's project — found no directory, applied no migrations, and failed later with "no such table". `resolveMigrationsDir()` resolves relative to this module and checks both the `dist` and sibling `src` layouts, because `tsc` does not copy `.sql` into `dist`. A missing directory now throws instead of silently returning.
 
 ## Tests
 Covered by `packages/storage/tests/db.test.ts` (connection, pragmas, idempotent migrations, checksum drift) and `packages/storage/tests/repositories.test.ts` (typed repository CRUD, append-only invariant, deterministic query ordering, submission content hashing).

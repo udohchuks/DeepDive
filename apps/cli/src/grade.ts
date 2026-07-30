@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ModelProvider, RubricDefinition } from '@deepdive/core';
+import { Finding, ModelProvider, RubricDefinition } from '@deepdive/core';
 import { CharterRubric, SddRubric, GraderPrompt } from '@deepdive/content';
 import { evaluateDeterministicGate } from '@deepdive/engine';
 
@@ -30,6 +30,8 @@ export interface GradeResult {
   lines: string[];
   shortCircuited: boolean;
   verdict?: GraderVerdict;
+  /** Deterministic-gate findings, surfaced so they can be persisted. */
+  findings: Finding[];
 }
 
 /**
@@ -59,7 +61,7 @@ export async function runGrade(
     for (const finding of gate.failedFindings) {
       lines.push(`  - [${finding.severity}] ${finding.code} on ${finding.targetFieldId}`);
     }
-    return { lines, shortCircuited: true };
+    return { lines, shortCircuited: true, findings: gate.failedFindings };
   }
 
   lines.push('deterministic gate: passed');
@@ -67,7 +69,7 @@ export async function runGrade(
   const judged = rubric.criteria.filter((c) => c.kind === 'judged');
   if (judged.length === 0) {
     lines.push('no judged criteria for this rubric — nothing to send to the model');
-    return { lines, shortCircuited: true };
+    return { lines, shortCircuited: true, findings: [] };
   }
 
   lines.push(`calling model for ${judged.length} judged criterion/criteria…`);
@@ -95,5 +97,5 @@ export async function runGrade(
     lines.push(`  - ${finding.met ? 'met' : 'not met'} ${finding.criterionId}: ${finding.comment}`);
   }
 
-  return { lines, shortCircuited: false, verdict };
+  return { lines, shortCircuited: false, verdict, findings: [] };
 }

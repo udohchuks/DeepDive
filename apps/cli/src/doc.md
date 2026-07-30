@@ -3,7 +3,7 @@
 **Package:** @deepdive/cli  ·  **Build step:** 9.0  ·  **Architecture ref:** §9b, D-1, D-2
 
 ## What it does
-Provides the first runnable entry point for DeepDive: a `deepdive` binary with two commands. `doctor` reports whether this machine can run a session at all (permission mode, provider selection, credential source) without making a network call or spending anything. `grade` runs a real submission through the deterministic gate and then the model-backed Grader.
+Provides the runnable entry point for DeepDive: a `deepdive` binary with four commands. `doctor` reports whether this machine can run a session at all (permission mode, provider selection, credential source) without making a network call or spending anything. `grade` runs a submission through the deterministic gate and then the model-backed Grader, recording it. `scaffold` and `verify` run the tool-using roles. `history` replays every round recorded for the project.
 
 ## How it works
 1. **Deterministic-first grading (D-1):** `runGrade` evaluates the rubric's deterministic criteria through `evaluateDeterministicGate` before anything else. If the gate fails, the command reports the failing findings and returns **without calling the model**. A charter missing its title costs nothing and gives the same answer every run.
@@ -42,7 +42,27 @@ deepdive scaffold ./workspace "add a failing test for the queue"
 deepdive verify --auto ./workspace "check the queue against the spec"
 ```
 
+### Persistence
+
+Every `grade` appends a round to `<project>/.deepdive/deepdive.db`, together with the artifact submitted and any deterministic findings:
+
+```bash
+deepdive grade charter ./charter.json   # saved as round 1 (revise)
+# ...revise the charter...
+deepdive grade charter ./charter.json   # saved as round 2 (approved)
+deepdive history
+```
+
+```
+    1. [revise] phase A  2026-07-30T10:49:40.603Z
+       - error: BOUND_VIOLATED on charter_title_present
+    2. [approved] phase A  2026-07-30T10:50:01.771Z
+```
+
 ## Constraints & gotchas
+- **History lives beside the project**, at `<project>/.deepdive/deepdive.db`, not in a shared home directory, so a project is self-contained and two projects cannot collide. The project directory is the current directory unless `--project <dir>` or `DEEPDIVE_PROJECT_DIR` says otherwise — one rule for every command, rather than deriving it from the artifact path for `grade` and the workspace for `scaffold`.
+- **Rounds are append-only.** A resubmission adds a round rather than replacing the previous verdict: the rejected attempt is the record of how the student's thinking changed. The repository refuses updates and deletes outright.
+- The project id is read back from the existing row on each run. Regenerating it would orphan every earlier round — history would look empty while still occupying the file.
 - **`grade` spends money.** It issues a real model call at temperature 0 against the pinned model whenever the deterministic gate passes and the rubric has judged criteria. `doctor` never does.
 - **Permission modes replace mandatory sandboxing for the student's own code.** `--approve` (default) asks before each mutating command; `--auto` lets policy decide silently. Read-only tools never prompt — prompting on every `read` trains people to approve without looking. `DEEPDIVE_PERMISSION_MODE` sets the default; an explicit flag wins, and an unrecognised value is ignored rather than trusted.
 - **Approval can only narrow what policy permits, never widen it.** The path and command policies run first and their denials are never offered for approval, so no answer at a prompt can authorise a write into a graded artifact (P-2) or let the Verifier mutate the repository. Verified end to end: `scaffold --auto` asked to write `sdd.json` produces no such file.

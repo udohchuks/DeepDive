@@ -16,8 +16,9 @@
     "@deepdive/content": "0.1.0",
     "@deepdive/core": "0.1.0",
     "@deepdive/engine": "0.1.0",
-    "@deepdive/provider": "0.1.0",
     "@deepdive/policy": "0.1.0",
+    "@deepdive/provider": "0.1.0",
+    "@deepdive/storage": "0.1.0",
     "zod": "3.24.1"
   }
 }

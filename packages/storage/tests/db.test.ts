@@ -1,6 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Database from 'better-sqlite3';
-import { createDbConnection, runMigrations, MigrationChecksumMismatchError } from '../src/index.js';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import {
+  createDbConnection,
+  runMigrations,
+  resolveMigrationsDir,
+  MigrationChecksumMismatchError,
+} from '../src/index.js';
 
 describe('SQLite Database & Migration Engine (Phase 1.4)', () => {
   let db: Database.Database;
@@ -52,5 +60,36 @@ describe('SQLite Database & Migration Engine (Phase 1.4)', () => {
 
     // Re-running runner must throw MigrationChecksumMismatchError
     expect(() => runMigrations(db)).toThrow(MigrationChecksumMismatchError);
+  });
+});
+
+describe('Migration path resolution (regression)', () => {
+  // The default migrations directory was `<cwd>/packages/storage/src/migrations`,
+  // so it resolved only when the process started at the repo root. The CLI, run
+  // from a student's own project, found nothing, applied no migrations, and
+  // failed later with "no such table".
+  it('PROTECTED INVARIANT: migrations resolve independently of the working directory', () => {
+    const originalCwd = process.cwd();
+    const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'deepdive-cwd-'));
+
+    try {
+      process.chdir(elsewhere);
+      const db = createDbConnection(':memory:');
+      runMigrations(db);
+
+      const tables = db
+        .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+        .all() as { name: string }[];
+      expect(tables.map((t) => t.name)).toContain('rounds');
+      db.close();
+    } finally {
+      process.chdir(originalCwd);
+      fs.rmSync(elsewhere, { recursive: true, force: true });
+    }
+  });
+
+  it('resolves to a directory that actually contains migration SQL', () => {
+    const dir = resolveMigrationsDir();
+    expect(fs.readdirSync(dir).some((f) => f.endsWith('.sql'))).toBe(true);
   });
 });

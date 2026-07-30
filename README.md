@@ -35,7 +35,12 @@ deepdive scaffold ./workspace "Read sdd.json and write failing tests under tests
 
 # 4. You implement the modules, then have the Verifier review
 deepdive verify ./workspace "Do the tests cover the modules in sdd.json? Report gaps."
+
+# 5. Review every round you have submitted
+deepdive history
 ```
+
+Each `grade` is saved to `<project>/.deepdive/deepdive.db`. Rounds are append-only, so a rejected attempt stays in the record next to the approved one — that history is the point.
 
 Steps 3 and 4 ask before each mutating command by default. Add `--auto` to let the path/command policy decide silently. Policy denials are never negotiable in either mode — no answer at a prompt lets the AI write a graded artifact.
 
@@ -82,4 +87,4 @@ DeepDive/
 
 Greenfield mode is runnable end to end from the CLI: charter → SDD → scaffolded tests → verification.
 
-Not yet wired: Codebase Onboarding has phase controllers but no CLI command, and the VS Code extension is not yet a loadable extension. Onboarding will need process isolation restored before it ships, since it runs a cloned third-party repository's test suite.
+Not yet wired: Codebase Onboarding has phase controllers but no CLI command, and the VS Code extension is not yet a loadable extension. `scaffold` and `verify` runs are not yet recorded as rounds — only `grade` is. Onboarding will need process isolation restored before it ships, since it runs a cloned third-party repository's test suite.

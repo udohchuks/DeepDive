@@ -2,6 +2,33 @@ import Database from 'better-sqlite3';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+/**
+ * Locates the migration SQL relative to this module.
+ *
+ * The default used to be `<cwd>/packages/storage/src/migrations`, which only
+ * resolved when the process happened to start at the repo root. Any consumer
+ * run from elsewhere — the `deepdive` CLI in a student's project, for instance
+ * — silently found no directory and applied no migrations, then failed later
+ * with "no such table". Resolving from the module means the answer does not
+ * depend on where the process was launched.
+ *
+ * Both layouts are checked because `tsc` does not copy `.sql` into `dist`: when
+ * built, the files still live in the sibling `src` tree.
+ */
+export function resolveMigrationsDir(): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [here, path.resolve(here, '../../src/migrations')];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate) && fs.readdirSync(candidate).some((f) => f.endsWith('.sql'))) {
+      return candidate;
+    }
+  }
+
+  return here;
+}
 
 export class MigrationChecksumMismatchError extends Error {
   constructor(public version: number, public expectedHash: string, public actualHash: string) {
@@ -23,9 +50,11 @@ export function runMigrations(db: Database.Database, migrationsDir?: string): vo
     );
   `);
 
-  const dir = migrationsDir ?? path.resolve(process.cwd(), 'packages/storage/src/migrations');
+  const dir = migrationsDir ?? resolveMigrationsDir();
   if (!fs.existsSync(dir)) {
-    return;
+    throw new Error(
+      `Migrations directory not found: ${dir}. The storage package is installed incorrectly.`,
+    );
   }
 
   const files = fs
