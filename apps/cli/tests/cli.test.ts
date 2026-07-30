@@ -5,12 +5,7 @@ import { runCli, CliIo, parsePermissionMode } from '../src/cli.js';
 import { createTerminalApprover } from '../src/approver.js';
 import { buildDoctorReport } from '../src/doctor.js';
 import { runGrade, GraderVerdictSchema, CLI_RUBRICS } from '../src/grade.js';
-import {
-  assertSandboxAvailable,
-  resolveRoleModelConfig,
-  SandboxUnavailableError,
-} from '../src/agent_commands.js';
-import { runPreflight } from '@deepdive/sandbox';
+import { resolveRoleModelConfig } from '../src/agent_commands.js';
 
 function captureIo(): CliIo & { lines: string[]; errors: string[] } {
   const lines: string[] = [];
@@ -171,15 +166,16 @@ describe('deepdive CLI', () => {
     }
   });
 
-  it('sandbox is still required for running code the student did not write', () => {
-    const preflight = runPreflight();
-    if (preflight.isSupported) {
-      expect(() => assertSandboxAvailable()).not.toThrow();
-      return;
-    }
-    // Fail-closed: no unsandboxed fallback exists for roles that execute tools.
-    expect(() => assertSandboxAvailable()).toThrow(SandboxUnavailableError);
-    expect(() => assertSandboxAvailable()).toThrow(/requires real isolation/);
+  it('runs without any sandbox preflight standing in the way', async () => {
+    // OS sandboxing was removed: nothing about starting a role depends on a
+    // platform isolation facility being installed. What still constrains a role
+    // is the path/command policy, which runs in-process on every OS.
+    const io = captureIo();
+    const exitCode = await runCli(['scaffold', './ws'], io);
+
+    expect(exitCode).toBe(1);
+    const output = [...io.lines, ...io.errors].join('\n');
+    expect(output).not.toMatch(/sandbox|bubblewrap|WSL2/i);
   });
 
   it('role sessions use the same pinned model as the Grader, not a separate one', () => {

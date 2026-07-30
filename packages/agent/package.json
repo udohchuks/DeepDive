@@ -12,7 +12,7 @@
     "@deepdive/content": "0.1.0",
     "@deepdive/core": "0.1.0",
     "@deepdive/provider": "0.1.0",
-    "@deepdive/sandbox": "0.1.0",
+    "@deepdive/policy": "0.1.0",
     "@earendil-works/pi-coding-agent": "0.83.0"
   }
 }

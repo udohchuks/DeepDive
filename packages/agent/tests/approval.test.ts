@@ -9,7 +9,7 @@ import {
   ApprovalRequest,
 } from '../src/index.js';
 import { buildScaffolderSessionOptions } from '../src/roles/scaffolder.js';
-import { PathPolicyEvaluator } from '@deepdive/sandbox';
+import { PathPolicyEvaluator } from '@deepdive/policy';
 
 const allowAll: ToolCallHook = () => ({ block: false });
 const denyAll: ToolCallHook = () => ({ block: true, reason: 'policy says no' });

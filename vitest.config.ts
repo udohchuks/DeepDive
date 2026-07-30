@@ -9,7 +9,7 @@ export default defineConfig({
     alias: {
       '@deepdive/core': path.resolve(__dirname, './packages/core/src'),
       '@deepdive/storage': path.resolve(__dirname, './packages/storage/src'),
-      '@deepdive/sandbox': path.resolve(__dirname, './packages/sandbox/src'),
+      '@deepdive/policy': path.resolve(__dirname, './packages/policy/src'),
       '@deepdive/provider': path.resolve(__dirname, './packages/provider/src'),
       '@deepdive/agent': path.resolve(__dirname, './packages/agent/src'),
       '@deepdive/vcs': path.resolve(__dirname, './packages/vcs/src'),

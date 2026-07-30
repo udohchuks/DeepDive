@@ -2,7 +2,7 @@ import { AgentSession, createRoleSession, RoleSessionOptions } from '../sdk/pi_c
 import { RoleModel } from '../sdk/role_model.js';
 import { createPermissionHook } from '../hooks/permission_hook.js';
 import { ApprovalOptions, withApproval } from '../hooks/approval.js';
-import { PathPolicyEvaluator } from '@deepdive/sandbox';
+import { PathPolicyEvaluator } from '@deepdive/policy';
 
 /** Exact tool grant for the Scaffolder. Asserted directly by the role tests. */
 export const SCAFFOLDER_TOOLS = ['write', 'edit', 'bash'] as const;

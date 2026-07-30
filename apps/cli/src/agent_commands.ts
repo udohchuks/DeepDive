@@ -7,19 +7,8 @@ import {
   ApprovalOptions,
   RoleModel,
 } from '@deepdive/agent';
-import { PathPolicyEvaluator, runPreflight } from '@deepdive/sandbox';
+import { PathPolicyEvaluator } from '@deepdive/policy';
 import { createModelProvider, KeyStore, MissingApiKeyError } from '@deepdive/provider';
-
-export class SandboxUnavailableError extends Error {
-  constructor(status: string, remediation?: string) {
-    super(
-      `Sandbox is not available on this machine (${status}). ` +
-        `Running a third-party repository's test suite executes code you did not write, so it requires real isolation.\n` +
-        (remediation ?? ''),
-    );
-    this.name = 'SandboxUnavailableError';
-  }
-}
 
 /**
  * Resolves the provider id and pinned model the roles should use.
@@ -68,26 +57,6 @@ export class PiBackedKeyStore implements KeyStore {
 
   getApiKey(providerName = 'anthropic'): string | null {
     return resolveProviderCredential(providerName, this.env).apiKey ?? null;
-  }
-}
-
-/**
- * Requires OS-level isolation before executing code the student did not write.
- *
- * This is deliberately *not* called for scaffold/verify against the student's
- * own project. Those are authorised the way Claude Code authorises them — a
- * path/command policy that cannot be overridden, plus the student approving
- * each mutating command — and demanding a VM to edit your own files was
- * complexity without a matching risk.
- *
- * It remains required for Codebase Onboarding, where DeepDive clones an
- * arbitrary repository and runs its suite: `npm install` alone executes
- * postinstall scripts from a stranger, and no approval prompt makes that safe.
- */
-export function assertSandboxAvailable(): void {
-  const preflight = runPreflight();
-  if (!preflight.isSupported) {
-    throw new SandboxUnavailableError(preflight.status, preflight.remediationText);
   }
 }
 

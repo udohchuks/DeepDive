@@ -1,9 +1,55 @@
+import { execFile } from 'child_process';
 import { TestRunner, TestRunResult } from '@deepdive/core';
-import { SandboxWrapper } from '@deepdive/sandbox';
 import { parseTestOutput } from './output_parser.js';
 
-export class SandboxedTestRunner implements TestRunner {
-  constructor(private sandbox: SandboxWrapper) {}
+export interface CommandExecution {
+  stdout: string;
+  stderr: string;
+}
+
+export type CommandExecutor = (
+  command: string,
+  args: string[],
+  options: { cwd: string; timeoutMs: number },
+) => Promise<CommandExecution>;
+
+/**
+ * Runs a command directly, with no shell.
+ *
+ * A failing test suite exits non-zero, which is a normal outcome here rather
+ * than an error, so a non-zero exit still yields its captured output for the
+ * parser. Only a spawn failure produces no output at all.
+ */
+const execFileExecutor: CommandExecutor = (command, args, options) =>
+  new Promise((resolve) => {
+    execFile(
+      command,
+      args,
+      { cwd: options.cwd, timeout: options.timeoutMs, windowsHide: true, shell: false },
+      (error, stdout, stderr) => {
+        resolve({
+          stdout: stdout ?? '',
+          stderr: stderr ?? (error ? String(error.message) : ''),
+        });
+      },
+    );
+  });
+
+/**
+ * Runs a project's test suite locally.
+ *
+ * This replaces the previous sandbox-wrapped runner. For a student's own
+ * project the code being executed is code they wrote and would run themselves,
+ * so requiring an OS sandbox to run it added an install step without a matching
+ * risk.
+ *
+ * That reasoning does **not** extend to Codebase Onboarding, where the suite
+ * belongs to a cloned third-party repository: `npm install` alone runs a
+ * stranger's postinstall scripts. Isolation belongs there, and the executor is
+ * injectable so it can be supplied without changing this class.
+ */
+export class LocalTestRunner implements TestRunner {
+  constructor(private readonly execute: CommandExecutor = execFileExecutor) {}
 
   async runTests(
     framework: 'vitest' | 'jest' | 'cargo' | 'pytest',
@@ -25,18 +71,11 @@ export class SandboxedTestRunner implements TestRunner {
       args.push(options.testMatch);
     }
 
-    const execResult = await this.sandbox.execute({
+    const result = await this.execute(command, args, {
       cwd: testDirectory,
-      command,
-      args,
-      mountPolicy: {
-        readOnlyPaths: [],
-        readWritePaths: [testDirectory],
-        blockedPaths: [],
-      },
       timeoutMs: options?.timeoutMs ?? 60000,
     });
 
-    return parseTestOutput(framework, execResult.stdout, execResult.stderr);
+    return parseTestOutput(framework, result.stdout, result.stderr);
   }
 }

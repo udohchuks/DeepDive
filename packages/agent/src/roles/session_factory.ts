@@ -2,7 +2,7 @@ import { AgentSession } from '../sdk/pi_contract.js';
 import { createScaffolderSession } from './scaffolder.js';
 import { createVerifierSession } from './verifier.js';
 import { createGraderSession, ToolFreeSession } from './grader.js';
-import { PathPolicyEvaluator } from '@deepdive/sandbox';
+import { PathPolicyEvaluator } from '@deepdive/policy';
 
 /**
  * Scaffolder and Verifier run on the pi coding-agent harness because they need

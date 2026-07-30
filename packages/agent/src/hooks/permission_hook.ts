@@ -1,4 +1,4 @@
-import { PathPolicyEvaluator, classifyCommand } from '@deepdive/sandbox';
+import { PathPolicyEvaluator, classifyCommand } from '@deepdive/policy';
 import { ToolCallHookContext, ToolCallHookResult } from '../sdk/pi_contract.js';
 
 export interface PermissionHookOptions {

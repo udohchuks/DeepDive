@@ -14,10 +14,14 @@ Adapts the real `@earendil-works/pi-coding-agent` SDK into role-scoped agent ses
 4. **Permission gate (Step 3.1):** `createRoleGateExtension` registers our policy hook as a pi **inline extension** on the `tool_call` event. It evaluates `PathPolicyEvaluator` and `classifyCommand`, and fails closed if the evaluator throws.
 5. **Dual-LLM quarantine boundary (Step 3.2):** Verifier observations become strictly typed `Finding` objects via `FindingSchema`. `filterAndSanitizeFindings` strips raw repo text before findings reach the Grader, so raw student or repository text never crosses that boundary (§6).
 
+6. **Authentication is pi's (`credential_resolver.ts`):** `resolveProviderCredential` checks the environment, then pi's login store, reporting which source won so a surprising result can be traced without printing the credential. Adopting pi's store is what makes `pi login` — including Anthropic OAuth — work for DeepDive. Each provider reads only its own variables, so no credential is offered to an endpoint it was not issued for.
+
+7. **Approval layer (`approval.ts`):** `withApproval` composes the policy hook with human approval in that order. Policy runs first and its denials are final — a student is never *offered* the chance to approve a graded-artifact write. Approval can only narrow what policy permits. Mode `approve` asks before mutating tools; `auto` asks nothing; read-only tools never prompt in either.
+
 ## How to use it
 ```typescript
 import { buildRoleSession } from '@deepdive/agent';
-import { PathPolicyEvaluator } from '@deepdive/sandbox';
+import { PathPolicyEvaluator } from '@deepdive/policy';
 
 const pathEvaluator = new PathPolicyEvaluator({
   readOnlyPaths: ['/workspace'],
@@ -33,12 +37,8 @@ const verifier = await buildRoleSession('verifier');
 const grader = await buildRoleSession('grader');
 ```
 
-6. **Authentication is pi's (`credential_resolver.ts`):** `resolveProviderCredential` checks the environment, then pi's login store, reporting which source won so a surprising result can be traced without printing the credential. Adopting pi's store is what makes `pi login` — including Anthropic OAuth — work for DeepDive. Each provider reads only its own variables, so no credential is offered to an endpoint it was not issued for.
-
-7. **Approval layer (`approval.ts`):** `withApproval` composes the policy hook with human approval in that order. Policy runs first and its denials are final — a student is never *offered* the chance to approve a graded-artifact write. Approval can only narrow what policy permits. Mode `approve` asks before mutating tools; `auto` asks nothing; read-only tools never prompt in either.
-
 ## Constraints & gotchas
-- **OS sandboxing is not required for the student's own project.** Authorisation there is the policy engine plus per-command approval — the model Claude Code uses. The sandbox remains required for Codebase Onboarding, where an arbitrary cloned repository's test suite runs code nobody here wrote. Path scoping was already enforced in-process by `PathPolicyEvaluator` in the tool gate, so the sandbox was a second lock on that particular door.
+- **There is no OS sandbox.** Authorisation is the policy engine plus per-command approval — the model Claude Code uses. Path scoping was always enforced in-process by `PathPolicyEvaluator` in the tool gate, so removing the sandbox did not remove the check that enforces P-2. Codebase Onboarding will need isolation restored before it ships, since a cloned repository's suite runs code nobody here wrote.
 - **OAuth drives sessions but not the Grader.** pi's `ModelRuntime` resolves and refreshes an OAuth token for Scaffolder and Verifier. The Grader issues a direct pi-ai call that takes an API key, so an OAuth-only login cannot drive grading; `deepdive doctor` reports this rather than letting it fail at the provider.
 - Reading pi's `auth.json` requires pi-coding-agent, which the Grader deliberately does not depend on. The CLI resolves the credential once as composition root and passes it down, so adopting pi auth did not drag the harness into the Grader.
 - **The old stub had a security inversion.** It read `noTools: 'builtin'` as "drop custom tools too", while real pi documents the opposite — built-ins disabled, extension/custom tools **kept**. Any role relying on the stub's reading would have silently retained custom tools. Roles now use exact allowlists, and a test asserts no role emits `noTools` at all.

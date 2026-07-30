@@ -4,7 +4,7 @@
   "references": [
     { "path": "./packages/core" },
     { "path": "./packages/storage" },
-    { "path": "./packages/sandbox" },
+    { "path": "./packages/policy" },
     { "path": "./packages/provider" },
     { "path": "./packages/agent" },
     { "path": "./packages/vcs" },

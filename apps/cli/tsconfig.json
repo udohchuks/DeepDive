@@ -11,6 +11,6 @@
     { "path": "../../packages/content" },
     { "path": "../../packages/engine" },
     { "path": "../../packages/provider" },
-    { "path": "../../packages/sandbox" }
+    { "path": "../../packages/policy" }
   ]
 }

@@ -55,9 +55,9 @@ export interface ApprovalOptions {
  * only read. Approval can therefore only ever *narrow* what policy permits,
  * never widen it.
  *
- * This is what replaces mandatory OS sandboxing for trusted code: the student
- * sees each mutating command before it runs, which is a real control, rather
- * than a VM boundary they had to install first.
+ * This is the authorisation model for the student's own project: they see each
+ * mutating command before it runs, which is a real control, rather than a VM
+ * boundary they had to install first.
  */
 export function withApproval(policy: ToolCallHook, options: ApprovalOptions): ToolCallHook {
   return async (context: ToolCallHookContext): Promise<ToolCallHookResult> => {

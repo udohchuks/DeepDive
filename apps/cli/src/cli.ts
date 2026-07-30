@@ -10,7 +10,7 @@ export const USAGE = `deepdive — guided project learning, run locally
 
 Usage:
   deepdive doctor
-      Check sandbox availability and provider/API-key configuration.
+      Check permission mode and provider/credential configuration.
       Makes no network call and spends nothing.
 
   deepdive grade <rubric> <artifact.json>

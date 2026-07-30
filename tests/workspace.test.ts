@@ -3,7 +3,7 @@ import { checkDependencyCycles } from '../scripts/check_cycles.js';
 import { checkDocs } from '../scripts/check_docs.js';
 import { PACKAGE_NAME as coreName } from '@deepdive/core';
 import { PACKAGE_NAME as storageName } from '@deepdive/storage';
-import { PACKAGE_NAME as sandboxName } from '@deepdive/sandbox';
+import { PACKAGE_NAME as sandboxName } from '@deepdive/policy';
 import { PACKAGE_NAME as providerName } from '@deepdive/provider';
 import { PACKAGE_NAME as agentName } from '@deepdive/agent';
 import { PACKAGE_NAME as vcsName } from '@deepdive/vcs';
@@ -17,7 +17,7 @@ describe('Workspace & Monorepo Foundation (Phase 0.1)', () => {
   it('should resolve all ten packages and the extension app by their @deepdive/* package names', () => {
     expect(coreName).toBe('@deepdive/core');
     expect(storageName).toBe('@deepdive/storage');
-    expect(sandboxName).toBe('@deepdive/sandbox');
+    expect(sandboxName).toBe('@deepdive/policy');
     expect(providerName).toBe('@deepdive/provider');
     expect(agentName).toBe('@deepdive/agent');
     expect(vcsName).toBe('@deepdive/vcs');

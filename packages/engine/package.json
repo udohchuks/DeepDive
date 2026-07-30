@@ -11,7 +11,7 @@
   "dependencies": {
     "@deepdive/core": "0.1.0",
     "@deepdive/storage": "0.1.0",
-    "@deepdive/sandbox": "0.1.0",
+    "@deepdive/policy": "0.1.0",
     "@deepdive/provider": "0.1.0",
     "@deepdive/agent": "0.1.0",
     "@deepdive/content": "0.1.0",

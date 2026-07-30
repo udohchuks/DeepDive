@@ -7,7 +7,7 @@
   "include": ["src/**/*"],
   "references": [
     { "path": "../core" },
-    { "path": "../sandbox" },
+    { "path": "../policy" },
     { "path": "../provider" },
     { "path": "../content" }
   ]

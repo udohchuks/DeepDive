@@ -1,9 +1,20 @@
 import path from 'path';
 import fs from 'fs';
-import { MountPolicy } from '../types.js';
+/**
+ * Which paths a role may read and write.
+ *
+ * Previously named MountPolicy and defined alongside the sandbox wrappers,
+ * because it described bind mounts. It now describes only in-process access
+ * checks, so it is named for what it actually is.
+ */
+export interface PathPolicy {
+  readOnlyPaths: string[];
+  readWritePaths: string[];
+  blockedPaths: string[];
+}
 
 export class PathPolicyEvaluator {
-  constructor(private policy: MountPolicy) {}
+  constructor(private policy: PathPolicy) {}
 
   /** Canonicalizes path, resolving relative components and symlinks if existing */
   public canonicalize(targetPath: string): string {

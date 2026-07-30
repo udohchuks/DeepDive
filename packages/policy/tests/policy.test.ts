@@ -6,14 +6,14 @@ describe('Sandbox Policy Evaluator (Phase 2.2)', () => {
   const rootDir = process.cwd();
   const policy = {
     readOnlyPaths: [path.join(rootDir, 'packages')],
-    readWritePaths: [path.join(rootDir, 'packages/sandbox/tests')],
-    blockedPaths: [path.join(rootDir, 'packages/sandbox/tests/blocked')],
+    readWritePaths: [path.join(rootDir, 'packages/policy/tests')],
+    blockedPaths: [path.join(rootDir, 'packages/policy/tests/blocked')],
   };
 
   const evaluator = new PathPolicyEvaluator(policy);
 
   it('allows write access inside readWritePaths', () => {
-    const target = path.join(rootDir, 'packages/sandbox/tests/test_file.txt');
+    const target = path.join(rootDir, 'packages/policy/tests/test_file.txt');
     const result = evaluator.evaluateWriteAccess(target);
     expect(result.allowed).toBe(true);
   });
@@ -26,13 +26,13 @@ describe('Sandbox Policy Evaluator (Phase 2.2)', () => {
   });
 
   it('blocks path traversal attempts (../../escape)', () => {
-    const target = path.join(rootDir, 'packages/sandbox/tests/../../core/src/index.ts');
+    const target = path.join(rootDir, 'packages/policy/tests/../../core/src/index.ts');
     const result = evaluator.evaluateWriteAccess(target);
     expect(result.allowed).toBe(false);
   });
 
   it('blocks explicitly blocked paths', () => {
-    const target = path.join(rootDir, 'packages/sandbox/tests/blocked/secret.txt');
+    const target = path.join(rootDir, 'packages/policy/tests/blocked/secret.txt');
     const result = evaluator.evaluateWriteAccess(target);
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain('explicitly blocked');

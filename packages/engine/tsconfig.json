@@ -9,7 +9,7 @@
     { "path": "../core" },
     { "path": "../storage" },
     { "path": "../agent" },
-    { "path": "../sandbox" },
+    { "path": "../policy" },
     { "path": "../content" }
   ]
 }

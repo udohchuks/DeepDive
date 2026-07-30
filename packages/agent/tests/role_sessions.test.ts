@@ -5,7 +5,7 @@ import { createRoleGateExtension, RoleSessionOptions } from '../src/index.js';
 import { buildScaffolderSessionOptions } from '../src/roles/scaffolder.js';
 import { buildVerifierSessionOptions } from '../src/roles/verifier.js';
 import { createGraderSession } from '../src/roles/grader.js';
-import { PathPolicyEvaluator } from '@deepdive/sandbox';
+import { PathPolicyEvaluator } from '@deepdive/policy';
 
 /**
  * Role scoping is enforced in two places: the exact `tools` allowlist pi is

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createPermissionHook } from '../src/index.js';
-import { PathPolicyEvaluator } from '@deepdive/sandbox';
+import { PathPolicyEvaluator } from '@deepdive/policy';
 
 describe('tool_call Permission Hook (Phase 3.1)', () => {
   it('blocks Verifier mutating tools and mutating bash commands', async () => {

@@ -22,7 +22,7 @@ import {
 import { buildScaffolderSessionOptions, SCAFFOLDER_TOOLS } from '../src/roles/scaffolder.js';
 import { buildVerifierSessionOptions, VERIFIER_TOOLS } from '../src/roles/verifier.js';
 import { createGraderSession } from '../src/roles/grader.js';
-import { PathPolicyEvaluator } from '@deepdive/sandbox';
+import { PathPolicyEvaluator } from '@deepdive/policy';
 
 /**
  * Build step 3.0: verify our contract against the INSTALLED SDK.
