@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Finding, ModelProvider, RubricDefinition } from '@deepdive/core';
+import { CryptoIdGenerator, Finding, ModelProvider, RubricDefinition } from '@deepdive/core';
 import {
   CharterRubric,
   SddRubric,
@@ -131,5 +131,18 @@ export async function runGrade(
     lines.push(`  - ${finding.met ? 'met' : 'not met'} ${finding.criterionId}: ${finding.comment}`);
   }
 
-  return { lines, shortCircuited: false, verdict, findings: [] };
+  // Unmet judged criteria are recorded as findings too, not just printed. The
+  // hint ladder attaches to the field the Grader flagged (§8b), and a round
+  // that stored nothing to point at could never be the subject of a hint.
+  const ids = new CryptoIdGenerator();
+  const unmet: Finding[] = verdict.criterionFindings
+    .filter((c) => !c.met)
+    .map((c) => ({
+      id: ids.generate(),
+      code: 'BOUND_VIOLATED',
+      severity: 'error',
+      targetFieldId: c.criterionId,
+    }));
+
+  return { lines, shortCircuited: false, verdict, findings: unmet };
 }

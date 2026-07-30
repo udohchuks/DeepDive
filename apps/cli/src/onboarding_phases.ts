@@ -7,6 +7,7 @@ import {
   CompletionRecord,
   CompletionRecordSchema,
   CryptoIdGenerator,
+  HintProfileEntry,
   ModelProvider,
   PhaseId,
   SystemClock,
@@ -197,6 +198,7 @@ export function buildCompletionRecord(
   projectId: string,
   charterTitle: string,
   rounds: readonly RoundSummary[],
+  hintProfile: HintProfileEntry[] = [],
   clock: Clock = new SystemClock(),
   ids = new CryptoIdGenerator(),
 ): CompletionResult {
@@ -231,7 +233,7 @@ export function buildCompletionRecord(
     mode: 'onboarding',
     charterTitle,
     completedPhases,
-    hintProfile: [],
+    hintProfile,
     completedAt,
     contentHash,
   });
@@ -242,6 +244,7 @@ export function buildCompletionRecord(
     lines: [
       `completion record for "${charterTitle}"`,
       `  phases: ${completedPhases.join(' → ')}`,
+      `  hints:  ${hintProfile.reduce((n, e) => n + e.revealedCount, 0)} revealed across ${hintProfile.length} field(s)`,
       `  hash:   ${contentHash}`,
     ],
   };

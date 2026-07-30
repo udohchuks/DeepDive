@@ -3,6 +3,7 @@ export const PACKAGE_NAME = '@deepdive/content';
 export * from './prompts/scaffolder.js';
 export * from './prompts/verifier.js';
 export * from './prompts/grader.js';
+export * from './prompts/hint.js';
 
 export * from './rubrics/charter.js';
 export * from './rubrics/sdd.js';

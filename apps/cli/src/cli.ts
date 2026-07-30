@@ -13,6 +13,15 @@ import {
   writeCompletionRecord,
 } from './onboarding_phases.js';
 import { askMultipleChoice } from './prompt.js';
+import {
+  generateHint,
+  HINT_LADDER,
+  primaryStickingPoint,
+  resolveRequestedLevel,
+  shouldOfferHint,
+  buildHintProfile,
+} from './hints.js';
+import { HintLevel } from '@deepdive/core';
 import { buildRoleModel, PiBackedKeyStore, runScaffold, runVerify } from './agent_commands.js';
 import { createTerminalApprover } from './approver.js';
 import { SessionStore } from './session_store.js';
@@ -46,6 +55,11 @@ Usage:
 
   deepdive complete
       Phase OB-G. Derive the completion record from your approved rounds.
+
+  deepdive hint [L1|L2|L3|L4]
+      Reveal the next rung of the hint ladder for your latest open round.
+      Unlimited, and logged rather than penalised. L4 is the ceiling: no
+      level ever gives you the answer.
 
   deepdive history
       Show every round recorded for this project, oldest first.
@@ -164,6 +178,28 @@ function recordRoundFor(
   try {
     const round = store.recordRound(input);
     io.out(`\nsaved as round ${round.roundNumber} (${store.dbPath})`);
+  } finally {
+    store.close();
+  }
+}
+
+/**
+ * Offers a hint when the same field has been the sticking point twice running.
+ *
+ * An offer, not an intervention: it prints a line and makes no model call. Being
+ * wrong twice about different things is ordinary progress; being stuck on the
+ * same field twice is the signal worth naming (§8b).
+ */
+function offerHintIfStuck(projectDir: string, io: CliIo): void {
+  const store = new SessionStore({ projectDir });
+  try {
+    const history = store.primaryFieldHistory();
+    if (!shouldOfferHint(history)) return;
+
+    io.out(
+      `\nThat is twice on ${history[history.length - 1]}. Run "deepdive hint" if you want a nudge —`,
+    );
+    io.out('it is recorded, but nothing scores you down for taking one.');
   } finally {
     store.close();
   }
@@ -291,6 +327,8 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
         verdictPayload: result.verdict,
       });
 
+      offerHintIfStuck(projectDir, io);
+
       // A submission needing revision exits non-zero so the result is visible
       // to a script or a pre-commit hook, not only to a reader. "approved" is
       // the only success; a deterministic-gate failure is a failure too.
@@ -319,6 +357,60 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       } finally {
         store.close();
       }
+    }
+
+    if (command === 'hint') {
+      const requested = rest.find((arg) => HINT_LADDER.includes(arg as HintLevel)) as
+        | HintLevel
+        | undefined;
+
+      const store = new SessionStore({ projectDir });
+      let generated;
+      try {
+        const turn = store.latestHintableTurn();
+        if (!turn) {
+          io.err('Nothing to hint at — no round has open findings. Submit something first.');
+          return 1;
+        }
+
+        const field = primaryStickingPoint(turn.findings)!;
+        const already = store.hintsFor(turn.turnId);
+        const level = resolveRequestedLevel(
+          already.map((h) => h.level),
+          requested,
+        );
+
+        const existing = already.find((h) => h.level === level);
+        if (existing) {
+          // Re-reading is free and must not re-generate: a second call at
+          // temperature 0 would still cost money to say the same thing, and a
+          // ladder whose rungs changed under the student would not be a ladder.
+          io.out(`${level} (already revealed) — on ${field}\n\n${existing.content}`);
+          return 0;
+        }
+
+        io.out(`round ${turn.roundNumber}, phase ${turn.phaseId}, stuck on ${field}`);
+
+        const provider = createModelProvider(undefined, new PiBackedKeyStore());
+        generated = await generateHint({
+          level,
+          targetFieldId: field,
+          artifact: turn.artifact,
+          findings: turn.findings,
+          alreadyRevealed: already.map((h) => ({ level: h.level, content: h.content })),
+          provider,
+        });
+
+        for (const line of generated.lines) io.out(line);
+
+        // Logged, never gated: this records that help was taken, and nothing
+        // reads it to penalise a completion.
+        store.recordHint(turn.turnId, generated.level, generated.content);
+      } finally {
+        store.close();
+      }
+
+      return 0;
     }
 
     if (command === 'characterize') {
@@ -427,7 +519,12 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
           return 1;
         }
 
-        const outcome = buildCompletionRecord(store.projectId, title, store.history());
+        const outcome = buildCompletionRecord(
+          store.projectId,
+          title,
+          store.history(),
+          buildHintProfile(store.hintProfileSource()),
+        );
         for (const line of outcome.lines) io.out(line);
         if (!outcome.complete) return 1;
 

@@ -7,9 +7,19 @@ import {
   ProjectRepository,
   RoundRepository,
   ArtifactRepository,
+  HintRepository,
   RoundRecord,
 } from '@deepdive/storage';
-import { Clock, Finding, IdGenerator, SystemClock, CryptoIdGenerator } from '@deepdive/core';
+import {
+  Clock,
+  Finding,
+  Hint,
+  HintLevel,
+  IdGenerator,
+  PhaseId,
+  SystemClock,
+  CryptoIdGenerator,
+} from '@deepdive/core';
 
 export const DEEPDIVE_DIR = '.deepdive';
 export const DB_FILENAME = 'deepdive.db';
@@ -30,6 +40,33 @@ export interface SessionStoreOptions {
   projectName?: string;
   clock?: Clock;
   idGenerator?: IdGenerator;
+}
+
+/**
+ * Which artifact each phase submits.
+ *
+ * A hint needs the work it is about, and rounds record a phase rather than a
+ * pointer to their artifact, so the phase is what maps back to it.
+ */
+export const PHASE_ARTIFACT_TYPE: Record<string, string> = {
+  A: 'charter',
+  B: 'sdd',
+  C: 'scaffold',
+  D: 'verify',
+  'OB-A': 'repo-charter',
+  'OB-B': 'rsdd',
+  'OB-C': 'plan',
+  'OB-D': 'characterization',
+  'OB-E': 'cdd',
+  'OB-F': 'quiz',
+};
+
+export interface HintableTurn {
+  turnId: string;
+  roundNumber: number;
+  phaseId: string;
+  findings: Finding[];
+  artifact: Record<string, unknown>;
 }
 
 export interface RoundSummary {
@@ -60,6 +97,7 @@ export class SessionStore {
   private readonly projects: ProjectRepository;
   private readonly rounds: RoundRepository;
   private readonly artifacts: ArtifactRepository;
+  private readonly hints: HintRepository;
   private readonly clock: Clock;
   private readonly ids: IdGenerator;
 
@@ -79,6 +117,7 @@ export class SessionStore {
     this.projects = new ProjectRepository(this.db);
     this.rounds = new RoundRepository(this.db);
     this.artifacts = new ArtifactRepository(this.db);
+    this.hints = new HintRepository(this.db);
 
     this.projectId = this.ensureProject(
       options.projectName ?? path.basename(path.resolve(options.projectDir)),
@@ -181,6 +220,86 @@ export class SessionStore {
     } catch {
       throw new Error(`Stored ${artifactType} artifact is not readable JSON.`);
     }
+  }
+
+  /**
+   * The most recent round that has something to be stuck on.
+   *
+   * Hints attach to a turn, not to a project: the ladder is per-turn (§8b), so
+   * a reveal must name which submission it was about. An approved round has no
+   * findings and is skipped — there is nothing to hint at.
+   */
+  latestHintableTurn(): HintableTurn | null {
+    const rounds = this.rounds.getRounds(this.projectId);
+
+    for (let i = rounds.length - 1; i >= 0; i -= 1) {
+      const round = rounds[i]!;
+      const turn = this.rounds.getTurnsForRound(round.id)[0];
+      if (!turn) continue;
+
+      const findings = this.rounds.getFindingsForTurn(turn.id);
+      if (findings.length === 0) continue;
+
+      return {
+        turnId: turn.id,
+        roundNumber: round.roundNumber,
+        phaseId: round.phaseId,
+        findings,
+        artifact: this.latestArtifact(PHASE_ARTIFACT_TYPE[round.phaseId] ?? '') ?? {},
+      };
+    }
+
+    return null;
+  }
+
+  /** Hints already revealed for a turn, oldest first. */
+  hintsFor(turnId: string): Hint[] {
+    return this.hints.getHintsForTurn(turnId);
+  }
+
+  /** Records one reveal. Logged, never gated — nothing reads this to penalise. */
+  recordHint(turnId: string, level: HintLevel, content: string): Hint {
+    const hint: Hint = {
+      id: this.ids.generate(),
+      turnId,
+      level,
+      content,
+      revealedAt: this.clock.isoString(),
+    };
+    this.hints.saveHint(hint);
+    return hint;
+  }
+
+  /**
+   * The primary sticking point of each round, oldest first.
+   *
+   * Struggle detection compares consecutive rounds, so it needs the sequence
+   * rather than the latest value alone.
+   */
+  primaryFieldHistory(): string[] {
+    return this.rounds
+      .getRounds(this.projectId)
+      .flatMap((round) => this.rounds.getTurnsForRound(round.id).slice(0, 1))
+      .map((turn) => this.rounds.getFindingsForTurn(turn.id)[0]?.targetFieldId)
+      .filter((field): field is string => Boolean(field));
+  }
+
+  /** Every turn that carries findings, with its hints, for the hint profile. */
+  hintProfileSource(): { phaseId: PhaseId; turnId: string; fieldId: string; hints: Hint[] }[] {
+    return this.rounds.getRounds(this.projectId).flatMap((round) =>
+      this.rounds.getTurnsForRound(round.id).flatMap((turn) => {
+        const fieldId = this.rounds.getFindingsForTurn(turn.id)[0]?.targetFieldId;
+        if (!fieldId) return [];
+        return [
+          {
+            phaseId: round.phaseId as PhaseId,
+            turnId: turn.id,
+            fieldId,
+            hints: this.hints.getHintsForTurn(turn.id),
+          },
+        ];
+      }),
+    );
   }
 
   /** Full round history, oldest first, with each round's findings attached. */

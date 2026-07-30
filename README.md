@@ -42,6 +42,28 @@ deepdive history
 
 Each `grade` is saved to `<project>/.deepdive/deepdive.db`. Rounds are append-only, so a rejected attempt stays in the record next to the approved one — that history is the point.
 
+### When you get stuck
+
+If the same field is flagged on two consecutive rounds, `grade` says so and points at `deepdive hint`. Hints climb a four-rung ladder — Orientation, Localization, Diagnostic, Procedural Nudge — one rung per command, each generated at the moment you ask for it:
+
+```
+$ deepdive hint
+round 2, phase A, stuck on charter_goal_clarity
+L1 · Orientation — on charter_goal_clarity
+
+Think about what the user should actually be able to do with the system. A strong
+goal describes the core capability from the user's perspective, not the
+implementation.
+
+Next: Localization (deepdive hint)
+```
+
+Three properties that are the whole point of the ladder:
+
+- **L4 is the ceiling.** There is no fifth rung — not as a prompt request the model might refuse, but structurally: asking for one is an error. Every level, including L1, carries the instruction never to reveal the answer, because a model asked for a gentle hint that happens to know the answer must still not give it.
+- **Reveals are unlimited and logged, not gated.** Taking hints is recorded in the completion record's hint profile as descriptive signal about your path. Nothing reads it to score you down. You cannot skip rungs, though — the ladder escalates one level at a time so each hint can build on the last.
+- **Re-reading a revealed level is free** and makes no model call, so a rung never changes under you.
+
 Steps 3 and 4 ask before each mutating command by default. Add `--auto` to let the path/command policy decide silently. Policy denials are never negotiable in either mode — no answer at a prompt lets the AI write a graded artifact.
 
 **Codebase Onboarding** — you learn and contribute to an existing repository:
@@ -130,6 +152,8 @@ Every command that produces a result records a round: `grade` under the rubric's
 
 Codebase Onboarding is runnable from the CLI: `onboard` clones and pins, and `grade rsdd` / `grade cdd` are wired with repo-grounded citation checking. Running a cloned repository's test suite is gated on an explicit prompt rather than an OS sandbox — that is a deliberate, stated trade-off, not a finished isolation story, and process isolation is still the right answer before this is put in front of students who will paste in arbitrary repository URLs.
 
-All seven onboarding phases OB-A through OB-G are reachable from the CLI. Not yet wired: the VS Code extension is not a loadable extension, and the hint system (`HINT_LEVEL_RULES`, the L4 procedural ceiling) has no CLI surface, so a completion record's hint profile is always empty.
+All seven onboarding phases OB-A through OB-G are reachable from the CLI, and the leveled hint ladder is wired to both modes with reveals rolling into the completion record's hint profile.
+
+Not yet wired: the VS Code extension is not a loadable extension. The quiz bank and mastery/concept tracking (`QuizItem`, `Concept`, `MasteryState` in core, `quizzes` in storage) are schema-only — `deepdive quiz` generates questions per run rather than drawing on a persisted bank, so nothing tracks mastery of a concept across sessions.
 
 Licensed MIT. Packages declare `files`, pinned `engines` and public `publishConfig`, and `npm pack` includes the migration SQL the built runner resolves at run time, so `npm publish --workspaces` is unblocked.

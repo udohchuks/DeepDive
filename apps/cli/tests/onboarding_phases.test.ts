@@ -154,26 +154,26 @@ describe('PROTECTED INVARIANT: OB-G is derived from history, not asserted', () =
   it('refuses to complete while any phase has no approved round', () => {
     // The student cannot claim a phase they never passed: the only input is
     // the append-only round history.
-    const result = buildCompletionRecord(projectId, 'Study', allApproved.slice(0, 3), fixedClock);
+    const result = buildCompletionRecord(projectId, 'Study', allApproved.slice(0, 3), [], fixedClock);
     expect(result.complete).toBe(false);
     expect(result.lines.join('\n')).toContain('OB-D');
   });
 
   it('does not count a rejected round as a pass', () => {
     const withRevise = [...allApproved.slice(0, 5), round('OB-F', 'revise')];
-    expect(buildCompletionRecord(projectId, 'Study', withRevise, fixedClock).complete).toBe(false);
+    expect(buildCompletionRecord(projectId, 'Study', withRevise, [], fixedClock).complete).toBe(false);
   });
 
   it('produces a record covering every phase once all are approved', () => {
-    const result = buildCompletionRecord(projectId, 'Study', allApproved, fixedClock);
+    const result = buildCompletionRecord(projectId, 'Study', allApproved, [], fixedClock);
     expect(result.complete).toBe(true);
     expect(result.record!.completedPhases).toEqual([...ONBOARDING_PHASE_SEQUENCE, 'OB-G']);
     expect(result.record!.mode).toBe('onboarding');
   });
 
   it('hashes the record so a later edit no longer matches it (D-7)', () => {
-    const a = buildCompletionRecord(projectId, 'Study', allApproved, fixedClock).record!;
-    const b = buildCompletionRecord(projectId, 'Different', allApproved, fixedClock).record!;
+    const a = buildCompletionRecord(projectId, 'Study', allApproved, [], fixedClock).record!;
+    const b = buildCompletionRecord(projectId, 'Different', allApproved, [], fixedClock).record!;
     expect(a.contentHash).toHaveLength(64);
     expect(a.contentHash).not.toBe(b.contentHash);
   });
