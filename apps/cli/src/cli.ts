@@ -20,6 +20,7 @@ Usage:
 
   deepdive history
       Show every round recorded for this project, oldest first.
+      Grades, scaffold runs and verify runs all appear, tagged by role.
 
   deepdive scaffold [--auto|--approve] <workspace> <instruction>
       Run the Scaffolder against a workspace (write/edit/bash, path-scoped).
@@ -96,6 +97,15 @@ export function parseProjectDir(
 
   return { projectDir: projectDir ?? env.DEEPDIVE_PROJECT_DIR ?? process.cwd(), rest };
 }
+
+/**
+ * Where an agent run lands in the greenfield phase sequence.
+ *
+ * Scaffolding produces the task/test breakdown of phase C; verification reports
+ * on the implemented modules and test suite of phase D. Recording them under
+ * their real phases keeps one ordered history rather than two parallel logs.
+ */
+export const AGENT_PHASE_IDS = { scaffold: 'C', verify: 'D' } as const;
 
 export interface CliIo {
   out: (line: string) => void;
@@ -176,7 +186,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
         io.out(`round history for ${projectDir}\n`);
         for (const round of rounds) {
           io.out(
-            `  ${String(round.roundNumber).padStart(3)}. [${round.status}] phase ${round.phaseId}  ${round.submittedAt}`,
+            `  ${String(round.roundNumber).padStart(3)}. [${round.status}] phase ${round.phaseId} ${round.roleId}  ${round.submittedAt}`,
           );
           for (const finding of round.findings) {
             io.out(`       - ${finding.severity}: ${finding.code} on ${finding.targetFieldId}`);
@@ -207,6 +217,32 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
           : await runVerify(workspace, instruction, model, approval);
 
       for (const line of result.lines) io.out(line);
+
+      // An agent run is a round without a verdict: no rubric judged it, so its
+      // status is `completed` rather than approved/revise. What makes it worth
+      // recording is the same thing that makes a graded round worth recording —
+      // history that shows whether the tests were ever scaffolded and whether
+      // the Verifier's findings were acted on between attempts.
+      const store = new SessionStore({ projectDir });
+      try {
+        const round = store.recordRound({
+          phaseId: AGENT_PHASE_IDS[command],
+          status: 'completed',
+          artifactType: command,
+          roleId: result.role,
+          artifactPayload: {
+            workspace,
+            instruction,
+            permissionMode: mode,
+            tools: result.tools,
+            summary: result.finalText,
+          },
+        });
+        io.out(`\nsaved as round ${round.roundNumber} (${store.dbPath})`);
+      } finally {
+        store.close();
+      }
+
       return 0;
     }
 

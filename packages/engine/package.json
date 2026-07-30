@@ -4,6 +4,15 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run"
@@ -15,9 +24,9 @@
     "@deepdive/provider": "0.1.0",
     "@deepdive/agent": "0.1.0",
     "@deepdive/content": "0.1.0",
-    "better-sqlite3": "^11.8.1"
+    "better-sqlite3": "11.7.0"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.12"
+    "@types/better-sqlite3": "7.6.12"
   }
 }

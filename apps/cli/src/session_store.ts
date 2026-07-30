@@ -37,6 +37,8 @@ export interface RoundSummary {
   phaseId: string;
   status: string;
   submittedAt: string;
+  /** Which role produced the round, so `grade` and `scaffold` are distinguishable. */
+  roleId: string;
   findings: Finding[];
 }
 
@@ -122,6 +124,8 @@ export class SessionStore {
     status: string;
     artifactType: string;
     artifactPayload: Record<string, unknown>;
+    /** Defaults to the Grader, the only role that recorded rounds originally. */
+    roleId?: string;
     findings?: Finding[];
     verdictPayload?: unknown;
   }): RoundRecord {
@@ -150,7 +154,7 @@ export class SessionStore {
       {
         id: this.ids.generate(),
         roundId: round.id,
-        roleId: 'grader',
+        roleId: input.roleId ?? 'grader',
         verdictStatus: input.status,
         payloadJson: JSON.stringify(input.verdictPayload ?? {}),
         createdAt: now,
@@ -164,15 +168,15 @@ export class SessionStore {
   /** Full round history, oldest first, with each round's findings attached. */
   history(): RoundSummary[] {
     return this.rounds.getRounds(this.projectId).map((round) => {
-      const findings = this.rounds
-        .getTurnsForRound(round.id)
-        .flatMap((turn) => this.rounds.getFindingsForTurn(turn.id));
+      const turns = this.rounds.getTurnsForRound(round.id);
+      const findings = turns.flatMap((turn) => this.rounds.getFindingsForTurn(turn.id));
 
       return {
         roundNumber: round.roundNumber,
         phaseId: round.phaseId,
         status: round.status,
         submittedAt: round.submittedAt,
+        roleId: turns[0]?.roleId ?? 'grader',
         findings,
       };
     });

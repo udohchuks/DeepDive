@@ -60,8 +60,16 @@ export class PiBackedKeyStore implements KeyStore {
   }
 }
 
+export type AgentRoleId = 'scaffolder' | 'verifier';
+
 export interface AgentRunResult {
   lines: string[];
+  /** Which role ran, carried through to the recorded turn. */
+  role: AgentRoleId;
+  /** Tools the role actually held, so a past run can be audited for scope. */
+  tools: string[];
+  /** The role's closing message — the finding text worth keeping. */
+  finalText: string;
 }
 
 interface MaybeMessage {
@@ -145,17 +153,25 @@ export async function runScaffold(
 
   await session.prompt(instruction);
 
-  return { lines: renderRunOutput('scaffolder', session) };
+  return buildRunResult('scaffolder', session);
 }
 
-function renderRunOutput(
-  role: string,
+function buildRunResult(
+  role: AgentRoleId,
   session: { getActiveToolNames(): string[]; messages: readonly unknown[] },
-): string[] {
-  const lines = [`${role}: ${session.getActiveToolNames().join(', ')}`, ''];
-  const text = extractFinalText(session.messages);
-  lines.push(text || '(the model returned no closing message)');
-  return lines;
+): AgentRunResult {
+  const tools = session.getActiveToolNames();
+  const finalText = extractFinalText(session.messages);
+  return {
+    role,
+    tools,
+    finalText,
+    lines: [
+      `${role}: ${tools.join(', ')}`,
+      '',
+      finalText || '(the model returned no closing message)',
+    ],
+  };
 }
 
 /**
@@ -171,5 +187,5 @@ export async function runVerify(
   const session = await createVerifierSession(model, path.resolve(workspace), approval);
   await session.prompt(instruction);
 
-  return { lines: renderRunOutput('verifier', session) };
+  return buildRunResult('verifier', session);
 }

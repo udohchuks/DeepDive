@@ -87,4 +87,8 @@ DeepDive/
 
 Greenfield mode is runnable end to end from the CLI: charter → SDD → scaffolded tests → verification.
 
-Not yet wired: Codebase Onboarding has phase controllers but no CLI command, and the VS Code extension is not yet a loadable extension. `scaffold` and `verify` runs are not yet recorded as rounds — only `grade` is. Onboarding will need process isolation restored before it ships, since it runs a cloned third-party repository's test suite.
+Every command that produces a result records a round: `grade` under the rubric's phase, `scaffold` under phase C and `verify` under phase D. An agent run has no verdict — no rubric judged it — so it is recorded with status `completed` and tagged with the role that ran it. `history` shows all of them in one sequence, which is the point: it puts a verify run between the rejected charter and the approved one, where it happened.
+
+Not yet wired: Codebase Onboarding has phase controllers but no CLI command, and the VS Code extension is not yet a loadable extension. Onboarding will need process isolation restored before it ships, since it runs a cloned third-party repository's test suite.
+
+Not yet published: the packages declare `files`, pinned `engines` and public `publishConfig`, and `npm pack` includes the migration SQL the built runner resolves at run time. No `LICENSE` has been chosen yet, which is the remaining blocker on a first `npm publish`.

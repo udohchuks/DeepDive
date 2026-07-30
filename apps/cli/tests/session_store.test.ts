@@ -146,3 +146,55 @@ describe('SessionStore persistence', () => {
     storeB.close();
   });
 });
+
+describe('agent runs recorded as rounds', () => {
+  it('attributes the round to the role that ran it', () => {
+    const dir = tempProject();
+    const store = new SessionStore({ projectDir: dir });
+
+    store.recordRound({
+      phaseId: 'A',
+      status: 'approved',
+      artifactType: 'charter',
+      artifactPayload: { title: 'x' },
+    });
+    store.recordRound({
+      phaseId: 'C',
+      status: 'completed',
+      artifactType: 'scaffold',
+      roleId: 'scaffolder',
+      artifactPayload: { instruction: 'write tests' },
+    });
+    store.close();
+
+    const reopened = new SessionStore({ projectDir: dir });
+    // Without the role, a reader cannot tell a graded submission from an agent
+    // run: both are just a phase and a status.
+    expect(reopened.history().map((r) => r.roleId)).toEqual(['grader', 'scaffolder']);
+    reopened.close();
+  });
+
+  it('numbers agent runs into the same sequence as grades', () => {
+    const dir = tempProject();
+    const store = new SessionStore({ projectDir: dir });
+
+    store.recordRound({ phaseId: 'A', status: 'revise', artifactType: 'charter', artifactPayload: {} });
+    store.recordRound({
+      phaseId: 'D',
+      status: 'completed',
+      artifactType: 'verify',
+      roleId: 'verifier',
+      artifactPayload: {},
+    });
+    store.recordRound({ phaseId: 'A', status: 'approved', artifactType: 'charter', artifactPayload: {} });
+
+    // One ordered history, not two parallel logs: the verify run sits between
+    // the rejected charter and the approved one, which is where it happened.
+    expect(store.history().map((r) => `${r.roundNumber}:${r.roleId}`)).toEqual([
+      '1:grader',
+      '2:verifier',
+      '3:grader',
+    ]);
+    store.close();
+  });
+});
