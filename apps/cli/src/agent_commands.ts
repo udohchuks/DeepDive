@@ -3,10 +3,11 @@ import {
   createRoleModel,
   createScaffolderSession,
   createVerifierSession,
+  resolveProviderCredential,
   RoleModel,
 } from '@deepdive/agent';
 import { PathPolicyEvaluator, runPreflight } from '@deepdive/sandbox';
-import { EnvironmentKeyStore, createModelProvider, MissingApiKeyError } from '@deepdive/provider';
+import { createModelProvider, KeyStore, MissingApiKeyError } from '@deepdive/provider';
 
 export class SandboxUnavailableError extends Error {
   constructor(status: string, remediation?: string) {
@@ -35,13 +36,38 @@ export function resolveRoleModelConfig(env: NodeJS.ProcessEnv = process.env): {
   return { providerId, modelId: provider.model ?? '' };
 }
 
+/**
+ * Resolves auth once, for every role, through pi's credential store.
+ *
+ * The CLI is the composition root, so it is the one place that both has pi
+ * available and knows which provider is configured. Resolving here means a
+ * student who has run `pi login` needs no .env at all, while the Grader — which
+ * deliberately has no pi-coding-agent dependency — still receives the same
+ * credential rather than resolving its own.
+ */
 export async function buildRoleModel(env: NodeJS.ProcessEnv = process.env): Promise<RoleModel> {
   const { providerId, modelId } = resolveRoleModelConfig(env);
-  const apiKey = new EnvironmentKeyStore().getApiKey(providerId);
-  if (!apiKey) {
+  const credential = resolveProviderCredential(providerId, env);
+
+  if (credential.source === 'none') {
     throw new MissingApiKeyError(providerId);
   }
-  return createRoleModel({ providerId, modelId, apiKey });
+
+  // An OAuth login has no API key to hand over; pi's own runtime resolves and
+  // refreshes the token, so we pass no key and let it do that.
+  return createRoleModel({ providerId, modelId, apiKey: credential.apiKey });
+}
+
+/**
+ * KeyStore backed by the same pi-aware resolution the roles use, so the Grader
+ * and the agent roles can never end up authenticating differently.
+ */
+export class PiBackedKeyStore implements KeyStore {
+  constructor(private readonly env: NodeJS.ProcessEnv = process.env) {}
+
+  getApiKey(providerName = 'anthropic'): string | null {
+    return resolveProviderCredential(providerName, this.env).apiKey ?? null;
+  }
 }
 
 /**

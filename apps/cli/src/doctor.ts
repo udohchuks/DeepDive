@@ -1,5 +1,6 @@
 import { runPreflight } from '@deepdive/sandbox';
-import { createModelProvider, EnvironmentKeyStore, KNOWN_PROVIDERS } from '@deepdive/provider';
+import { createModelProvider, KNOWN_PROVIDERS } from '@deepdive/provider';
+import { describeCredentialSource, resolveProviderCredential } from '@deepdive/agent';
 
 export interface DoctorReport {
   lines: string[];
@@ -8,9 +9,14 @@ export interface DoctorReport {
 
 /**
  * Reports whether this machine can actually run a session, without making a
- * network call or spending anything. Sandbox availability and key resolution
- * are the two things that most often block a first run, and both fail closed,
- * so it is worth being able to check them separately from doing real work.
+ * network call or spending anything. Sandbox availability and credential
+ * resolution are the two things that most often block a first run, and both
+ * fail closed, so it is worth being able to check them separately from doing
+ * real work.
+ *
+ * The credential *source* is reported (environment vs `pi login`) because with
+ * two possible sources, "found" alone is not enough to explain a surprising
+ * result. The credential itself is never printed.
  */
 export function buildDoctorReport(env: NodeJS.ProcessEnv = process.env): DoctorReport {
   const lines: string[] = [];
@@ -27,16 +33,18 @@ export function buildDoctorReport(env: NodeJS.ProcessEnv = process.env): DoctorR
   lines.push(`provider     : ${requested}${env.MODEL_PROVIDER ? '' : ' (default)'}`);
 
   try {
-    const keyStore = new EnvironmentKeyStore();
-    const provider = createModelProvider(env.MODEL_PROVIDER, keyStore);
-    lines.push(`model        : ${(provider as { model?: string }).model ?? 'unknown'}`);
+    const provider = createModelProvider(env.MODEL_PROVIDER) as { model?: string };
+    lines.push(`model        : ${provider.model ?? 'unknown'}`);
 
-    const providerId = requested.toLowerCase() === 'claude' ? 'anthropic' : requested.toLowerCase();
-    if (keyStore.getApiKey(providerId)) {
-      lines.push('api key      : found');
-    } else {
+    const credential = resolveProviderCredential(requested, env);
+    lines.push(`credential   : ${describeCredentialSource(credential)}`);
+
+    if (credential.source === 'none') {
       ok = false;
-      lines.push('api key      : MISSING — there is no unauthenticated path, so calls will fail');
+    } else if (credential.source === 'pi-login-oauth') {
+      // The Grader issues a direct pi-ai call, which takes an API key rather
+      // than a refreshable token, so an OAuth-only login cannot drive it.
+      lines.push('               note: `grade` needs an API key; OAuth drives scaffold/verify only');
     }
   } catch (err: unknown) {
     ok = false;

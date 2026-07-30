@@ -5,6 +5,7 @@ import { CLI_RUBRICS, runGrade } from './grade.js';
 import {
   assertSandboxAvailable,
   buildRoleModel,
+  PiBackedKeyStore,
   runScaffold,
   runVerify,
 } from './agent_commands.js';
@@ -70,7 +71,10 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       const raw = await readFile(artifactPath, 'utf8');
       const payload = JSON.parse(raw) as Record<string, unknown>;
 
-      const result = await runGrade(rubricName, payload, createModelProvider());
+      // Same pi-aware resolution the agent roles use, so the Grader cannot end
+      // up authenticating from a different source than scaffold/verify.
+      const provider = createModelProvider(undefined, new PiBackedKeyStore());
+      const result = await runGrade(rubricName, payload, provider);
       for (const line of result.lines) io.out(line);
       return 0;
     }

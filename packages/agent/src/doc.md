@@ -33,7 +33,11 @@ const verifier = await buildRoleSession('verifier');
 const grader = await buildRoleSession('grader');
 ```
 
+6. **Authentication is pi's (`credential_resolver.ts`):** `resolveProviderCredential` checks the environment, then pi's login store, reporting which source won so a surprising result can be traced without printing the credential. Adopting pi's store is what makes `pi login` — including Anthropic OAuth — work for DeepDive. Each provider reads only its own variables, so no credential is offered to an endpoint it was not issued for.
+
 ## Constraints & gotchas
+- **OAuth drives sessions but not the Grader.** pi's `ModelRuntime` resolves and refreshes an OAuth token for Scaffolder and Verifier. The Grader issues a direct pi-ai call that takes an API key, so an OAuth-only login cannot drive grading; `deepdive doctor` reports this rather than letting it fail at the provider.
+- Reading pi's `auth.json` requires pi-coding-agent, which the Grader deliberately does not depend on. The CLI resolves the credential once as composition root and passes it down, so adopting pi auth did not drag the harness into the Grader.
 - **The old stub had a security inversion.** It read `noTools: 'builtin'` as "drop custom tools too", while real pi documents the opposite — built-ins disabled, extension/custom tools **kept**. Any role relying on the stub's reading would have silently retained custom tools. Roles now use exact allowlists, and a test asserts no role emits `noTools` at all.
 - **`createAgentSession` is async** and returns `{ session, extensionsResult, modelFallbackMessage }`, not a session directly. Role factories are therefore async.
 - **pi's `tool_call` event exposes mutable `input` with no re-validation after a handler edits it.** The gate is handed the live object, so it validates what will actually execute, and discovered extensions are disabled (`noExtensions: true`) so no third-party handler can mutate arguments after our gate has approved them. Inline factories still load, so our own gate survives.

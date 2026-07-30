@@ -14,7 +14,12 @@ export class RoleModelUnavailableError extends Error {
 export interface RoleModelOptions {
   providerId: string;
   modelId: string;
-  apiKey: string;
+  /**
+   * Explicit key. When omitted, pi resolves auth itself from its login store
+   * (including OAuth) or ambient environment — which is what lets a student who
+   * has run `pi login` use DeepDive without creating a .env file.
+   */
+  apiKey?: string;
   /** Allow pi to refresh model catalogs over the network. Off by default (D-5). */
   allowModelNetwork?: boolean;
 }
@@ -41,13 +46,18 @@ export async function createRoleModel(options: RoleModelOptions): Promise<RoleMo
     allowModelNetwork: options.allowModelNetwork ?? false,
   });
 
-  // setRuntimeApiKey triggers a catalog refresh, and its default options let
-  // that refresh reach the network — which hangs when the catalog host is slow
-  // or unreachable. Pass the flag explicitly so the refresh stays offline
-  // unless network access was asked for.
-  await runtime.setRuntimeApiKey(options.providerId, options.apiKey, {
-    allowNetwork: options.allowModelNetwork ?? false,
-  });
+  if (options.apiKey) {
+    // setRuntimeApiKey triggers a catalog refresh, and its default options let
+    // that refresh reach the network — which hangs when the catalog host is
+    // slow or unreachable. Pass the flag explicitly so the refresh stays
+    // offline unless network access was asked for.
+    //
+    // The overlay is non-persistent, so an explicitly supplied key is used for
+    // this process only and never written into pi's auth.json.
+    await runtime.setRuntimeApiKey(options.providerId, options.apiKey, {
+      allowNetwork: options.allowModelNetwork ?? false,
+    });
+  }
 
   const model = runtime.getModel(options.providerId, options.modelId);
   if (!model) {
