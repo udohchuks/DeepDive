@@ -1,15 +1,22 @@
-import { AgentSession, createAgentSession } from '../sdk/pi_contract.js';
+import { AgentSession, createRoleSession, RoleSessionOptions } from '../sdk/pi_contract.js';
 import { createPermissionHook } from '../hooks/permission_hook.js';
 
-export function createVerifierSession(): AgentSession {
-  const permHook = createPermissionHook({
-    role: 'verifier',
-  });
+/**
+ * Exact tool grant for the Verifier. Read-only by construction: `write` and
+ * `edit` are absent from the allowlist, and the permission hook independently
+ * rejects mutating bash commands. The Verifier is the only role that touches
+ * raw repository and student text, so it gets both layers.
+ */
+export const VERIFIER_TOOLS = ['read', 'grep', 'find', 'ls', 'bash'] as const;
 
-  return createAgentSession('verifier', {
-    tools: ['read', 'grep', 'find', 'ls', 'bash'],
-    hooks: {
-      tool_call: permHook,
-    },
-  });
+export function buildVerifierSessionOptions(): RoleSessionOptions {
+  return {
+    role: 'verifier',
+    tools: [...VERIFIER_TOOLS],
+    hook: createPermissionHook({ role: 'verifier' }),
+  };
+}
+
+export function createVerifierSession(): Promise<AgentSession> {
+  return createRoleSession(buildVerifierSessionOptions());
 }

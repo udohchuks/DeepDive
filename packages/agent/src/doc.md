@@ -3,16 +3,16 @@
 **Package:** @deepdive/agent  ·  **Build step:** 3.0, 3.1, 3.2, 3.3  ·  **Architecture ref:** §2, §3, §4, §6
 
 ## What it does
-Implements the pi SDK agent harness (`createAgentSession`), the `tool_call` permission hook, the Dual-LLM quarantine boundary (`Finding` filter), and role-scoped session factories (`Scaffolder`, `Verifier`, `Grader`).
+Adapts the real `@earendil-works/pi-coding-agent` SDK into role-scoped agent sessions, implements the `tool_call` permission gate, and enforces the Dual-LLM quarantine boundary (`Finding` filter) between Verifier and Grader.
 
 ## How it works
-1. **SDK Contract (Step 3.0):** Wraps `@earendil-works/pi-coding-agent` session creation with per-role tool allowlists (`tools`, `excludeTools`, `noTools`, `customTools`).
-2. **Permission Hook (Step 3.1):** Evaluates path policies (`PathPolicyEvaluator`) and command policies (`classifyCommand`) before tool execution. Fails closed on evaluator errors.
-3. **Dual-LLM Quarantine Boundary (Step 3.2):** Verifier observations are transformed into strictly typed `Finding` objects via `FindingSchema`. The `filterAndSanitizeFindings` function strips raw repo text before handing structured findings to the Grader role, preventing prompt injection smuggling (§6).
-4. **Role Tool Scoping & P-2 Invariant (Step 3.3):**
-   - **Scaffolder:** `write`, `edit`, `bash` scoped to scaffold/test paths. P-2 invariant check blocks writes into graded-artifact paths (`sdd.json`, `rsdd.json`, `cdd.json`).
-   - **Verifier:** Read-only tools (`read`, `grep`, `find`, `ls`, read-only `bash`). Cannot mutate workspace or execute mutating shell commands.
-   - **Grader:** `noTools: 'all'` with custom verdict tool (`submit_rubric_verdict`). Has no filesystem access by construction.
+1. **SDK contract (Step 3.0):** `pi_contract.ts` is a thin adapter over the **installed** pi SDK — `createAgentSession`, `DefaultResourceLoader`, `SettingsManager`, `SessionManager`. It was previously a hand-written reimplementation that had never been checked against the published package; see *Constraints* for what that hid.
+2. **Roles split by whether they need tools:**
+   - **Scaffolder** and **Verifier** run on the pi harness because they need real filesystem and bash tools.
+   - **Grader** does **not** use pi-coding-agent at all. It holds no tools and emits only a structured verdict, so a tool-executing harness would be capability it must never have. Its model calls go through `@deepdive/provider` (pi-ai). P-2 becomes a property of what the Grader *is*, not of a hook that could be misconfigured.
+3. **Exact allowlists, never `noTools`:** every role declares an explicit `tools` array. pi documents the allowlist as exact ("only the listed tool names are enabled"), so role scoping does not depend on interpreting `noTools` semantics.
+4. **Permission gate (Step 3.1):** `createRoleGateExtension` registers our policy hook as a pi **inline extension** on the `tool_call` event. It evaluates `PathPolicyEvaluator` and `classifyCommand`, and fails closed if the evaluator throws.
+5. **Dual-LLM quarantine boundary (Step 3.2):** Verifier observations become strictly typed `Finding` objects via `FindingSchema`. `filterAndSanitizeFindings` strips raw repo text before findings reach the Grader, so raw student or repository text never crosses that boundary (§6).
 
 ## How to use it
 ```typescript
@@ -25,16 +25,25 @@ const pathEvaluator = new PathPolicyEvaluator({
   blockedPaths: [],
 });
 
-const scaffolder = buildRoleSession('scaffolder', pathEvaluator, ['sdd.json']);
-const verifier = buildRoleSession('verifier');
-const grader = buildRoleSession('grader');
+// Scaffolder and Verifier are async — they construct a real pi session.
+const scaffolder = await buildRoleSession('scaffolder', pathEvaluator, ['sdd.json']);
+const verifier = await buildRoleSession('verifier');
+
+// The Grader is tool-free and needs no harness.
+const grader = await buildRoleSession('grader');
 ```
 
 ## Constraints & gotchas
-- Scaffolder writes targeting graded artifact paths (`sdd.json`, `rsdd.json`, `cdd.json`) are blocked by P-2 invariant check.
-- Grader session has zero filesystem access.
+- **The old stub had a security inversion.** It read `noTools: 'builtin'` as "drop custom tools too", while real pi documents the opposite — built-ins disabled, extension/custom tools **kept**. Any role relying on the stub's reading would have silently retained custom tools. Roles now use exact allowlists, and a test asserts no role emits `noTools` at all.
+- **`createAgentSession` is async** and returns `{ session, extensionsResult, modelFallbackMessage }`, not a session directly. Role factories are therefore async.
+- **pi's `tool_call` event exposes mutable `input` with no re-validation after a handler edits it.** The gate is handed the live object, so it validates what will actually execute, and discovered extensions are disabled (`noExtensions: true`) so no third-party handler can mutate arguments after our gate has approved them. Inline factories still load, so our own gate survives.
+- pi provides no `clock`/`idGenerator` injection point; session ids come from its `SessionManager`. D-3 injection applies to our code, not to pi's session identifiers.
+- Scaffolder writes targeting graded-artifact paths (`sdd.json`, `rsdd.json`, `cdd.json`) are blocked by the P-2 check.
+- Requires Node **22.19.0** — pi-coding-agent and pi-ai both require `>=22.19.0`.
 
 ## Tests
-Covered by `packages/agent/tests/sdk_contract.test.ts`, `packages/agent/tests/permission_hook.test.ts`, `packages/agent/tests/quarantine.test.ts`, and `packages/agent/tests/role_sessions.test.ts`.
+`packages/agent/tests/sdk_contract.test.ts` verifies our adapter against the **installed** SDK (previously it verified a stub against itself), plus `permission_hook.test.ts`, `quarantine.test.ts`, and `role_sessions.test.ts`. Role tests drive the gate through the same extension pi itself would invoke, rather than through a stubbed executor.
+
+PROTECTED INVARIANT tests: role scoping never depends on `noTools` semantics; the Grader holds no tools and no coding-agent harness; a throwing policy hook fails closed; the gate reads live tool input rather than a pre-mutation snapshot; P-2 blocks Scaffolder writes into graded-artifact paths.
 
 Command: `npm --workspace=packages/agent run test`

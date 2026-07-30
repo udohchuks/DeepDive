@@ -12,6 +12,7 @@
     { "path": "./packages/engine" },
     { "path": "./packages/greenfield" },
     { "path": "./packages/onboarding" },
-    { "path": "./apps/vscode-extension" }
+    { "path": "./apps/vscode-extension" },
+    { "path": "./apps/cli" }
   ]
 }

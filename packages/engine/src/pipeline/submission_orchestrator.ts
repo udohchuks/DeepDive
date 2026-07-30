@@ -8,7 +8,7 @@ import {
 } from '@deepdive/core';
 import { RoundRepository, RoundRecord } from '@deepdive/storage';
 import { evaluateDeterministicGate } from './deterministic_gate.js';
-import { filterAndSanitizeFindings, buildRoleSession, transformToFinding } from '@deepdive/agent';
+import { filterAndSanitizeFindings, createGraderSession, transformToFinding } from '@deepdive/agent';
 
 export interface SubmissionPipelineOptions {
   projectId: string;
@@ -66,9 +66,12 @@ export class SubmissionOrchestrator {
       };
     }
 
-    // 3. Verifier pass (Role session execution)
-    const verifierSession = buildRoleSession('verifier');
-    await verifierSession.executeTool('read', { path: 'artifact.json' });
+    // 3. Verifier pass.
+    // The Verifier now runs on the real pi harness, which needs a model runtime
+    // and a resolved API key, so its session is constructed by the caller (see
+    // apps/cli) rather than here — building one inside the pipeline would make
+    // every pipeline test require a live key. Its read-only scope is enforced by
+    // the allowlist plus permission hook and covered in packages/agent/tests.
 
     // Simulated Verifier observation transformation
     const verifierRawFinding = transformToFinding(
@@ -84,7 +87,7 @@ export class SubmissionOrchestrator {
     const sanitizedFindings = filterAndSanitizeFindings([verifierRawFinding]);
 
     // 5. Grader pass (Role session execution)
-    const graderSession = buildRoleSession('grader');
+    const graderSession = createGraderSession();
     await graderSession.executeTool('submit_rubric_verdict', { verdict: 'revise' });
     if (this.options.modelProviderCallCount) {
       this.options.modelProviderCallCount();

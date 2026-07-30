@@ -1,21 +1,24 @@
-import { AgentSession, createAgentSession } from '../sdk/pi_contract.js';
+import { AgentSession, createRoleSession, RoleSessionOptions } from '../sdk/pi_contract.js';
 import { createPermissionHook } from '../hooks/permission_hook.js';
 import { PathPolicyEvaluator } from '@deepdive/sandbox';
 
-export function createScaffolderSession(
+/** Exact tool grant for the Scaffolder. Asserted directly by the role tests. */
+export const SCAFFOLDER_TOOLS = ['write', 'edit', 'bash'] as const;
+
+export function buildScaffolderSessionOptions(
   pathEvaluator: PathPolicyEvaluator,
   gradedArtifactPaths: string[] = ['sdd.json', 'rsdd.json', 'cdd.json'],
-): AgentSession {
-  const permHook = createPermissionHook({
+): RoleSessionOptions {
+  return {
     role: 'scaffolder',
-    pathEvaluator,
-    gradedArtifactPaths,
-  });
+    tools: [...SCAFFOLDER_TOOLS],
+    hook: createPermissionHook({ role: 'scaffolder', pathEvaluator, gradedArtifactPaths }),
+  };
+}
 
-  return createAgentSession('scaffolder', {
-    tools: ['write', 'edit', 'bash'],
-    hooks: {
-      tool_call: permHook,
-    },
-  });
+export function createScaffolderSession(
+  pathEvaluator: PathPolicyEvaluator,
+  gradedArtifactPaths?: string[],
+): Promise<AgentSession> {
+  return createRoleSession(buildScaffolderSessionOptions(pathEvaluator, gradedArtifactPaths));
 }
