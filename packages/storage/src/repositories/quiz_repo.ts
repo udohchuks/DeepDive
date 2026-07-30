@@ -18,10 +18,17 @@ interface CompletionRecordDbRow {
 export class QuizRepository {
   constructor(private db: Database.Database) {}
 
+  /**
+   * Adds a question to the project's bank.
+   *
+   * Ignores a question already banked under the same wording: generation runs
+   * again on every quiz, and without this the bank would fill with near-copies
+   * of the same question and crowd out the concepts still untested.
+   */
   saveQuizItem(projectId: string, item: QuizItem): void {
     this.db
       .prepare(
-        'INSERT INTO quizzes (id, project_id, concept_id, quiz_type, question, options_json, correct_answer, explanation) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT OR IGNORE INTO quizzes (id, project_id, concept_id, quiz_type, question, options_json, correct_answer, explanation) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       )
       .run(
         item.id,

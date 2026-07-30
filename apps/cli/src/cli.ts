@@ -4,8 +4,12 @@ import { buildDoctorReport } from './doctor.js';
 import { CITATION_CRITERION, CLI_RUBRICS, ONBOARDING_RUBRICS, runGrade } from './grade.js';
 import { readOnboardingConfig, runOnboard, verifyRepoCitations } from './onboarding_commands.js';
 import {
+  applyQuizToMastery,
   buildCompletionRecord,
   generateQuiz,
+  QuizQuestion,
+  renderMastery,
+  selectFromBank,
   isTestFramework,
   runCharacterize,
   scoreQuiz,
@@ -21,7 +25,7 @@ import {
   shouldOfferHint,
   buildHintProfile,
 } from './hints.js';
-import { HintLevel } from '@deepdive/core';
+import { HintLevel, QuizItem } from '@deepdive/core';
 import { buildRoleModel, PiBackedKeyStore, runScaffold, runVerify } from './agent_commands.js';
 import { createTerminalApprover } from './approver.js';
 import { SessionStore } from './session_store.js';
@@ -50,8 +54,9 @@ Usage:
       verdict — no model is called on this path.
 
   deepdive quiz
-      Phase OB-F. Comprehension questions generated from your approved
-      reverse SDD, scored by exact match.
+      Phase OB-F. Draws from your question bank, favouring concepts you
+      have not yet mastered, and writes new questions only to fill the
+      gap. Scored by exact match; mastery carries across sessions.
 
   deepdive complete
       Phase OB-G. Derive the completion record from your approved rounds.
@@ -152,6 +157,20 @@ export function parseProjectDir(
  * their real phases keeps one ordered history rather than two parallel logs.
  */
 export const AGENT_PHASE_IDS = { scaffold: 'C', verify: 'D' } as const;
+
+/** How many questions one quiz asks. */
+export const QUIZ_LENGTH = 5;
+
+/**
+ * Only multiple-choice items can be scored without a model.
+ *
+ * The bank's schema allows traced and explanatory question types, which a
+ * future surface may add; drawing one here would mean grading free text, and
+ * the quiz would stop being deterministic.
+ */
+function isMultipleChoice(item: QuizItem): item is QuizItem & { options: string[] } {
+  return item.type === 'multiple_choice' && Array.isArray(item.options) && item.options.length >= 2;
+}
 
 export interface CliIo {
   out: (line: string) => void;
@@ -454,25 +473,43 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
     if (command === 'quiz') {
       const store = new SessionStore({ projectDir });
       let rsdd: Record<string, unknown> | null;
+      let questions: QuizQuestion[];
+      let mastery;
       try {
         rsdd = store.latestArtifact('rsdd');
+        if (!rsdd) {
+          io.err('No reverse SDD on record. Run "deepdive grade rsdd <rsdd.json>" first.');
+          return 1;
+        }
+
+        mastery = store.masteryStates();
+        const bank = store.quizBank().filter(isMultipleChoice);
+        const selected = selectFromBank(bank, mastery, QUIZ_LENGTH);
+        questions = selected.chosen;
+
+        // Generate only the shortfall. A question already banked costs nothing
+        // to re-ask, and re-asking one answered wrong is how mastery moves.
+        if (selected.shortfall > 0) {
+          const provider = createModelProvider(undefined, new PiBackedKeyStore());
+          const fresh = await generateQuiz(rsdd, provider, selected.shortfall);
+          for (const question of fresh) {
+            store.bankQuizItem({ ...question, type: 'multiple_choice' });
+          }
+          questions = [...questions, ...fresh].slice(0, QUIZ_LENGTH);
+          io.out(`${questions.length} questions (${fresh.length} newly written).`);
+        } else {
+          io.out(`${questions.length} questions from your bank of ${bank.length}.`);
+        }
       } finally {
         store.close();
       }
 
-      if (!rsdd) {
-        io.err('No reverse SDD on record. Run "deepdive grade rsdd <rsdd.json>" first.');
-        return 1;
-      }
-
-      const provider = createModelProvider(undefined, new PiBackedKeyStore());
-      const questions = await generateQuiz(rsdd, provider);
       if (questions.length === 0) {
         io.err('The model returned no answerable questions. Try again.');
         return 1;
       }
 
-      io.out(`${questions.length} questions from your approved reverse SDD.\n`);
+      io.out('');
       const answers: string[] = [];
       for (const question of questions) {
         const answer = await askMultipleChoice(question.question, question.options, io.out);
@@ -487,6 +524,22 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       const score = scoreQuiz(questions, answers);
       io.out('');
       for (const line of score.lines) io.out(line);
+
+      // Mastery carries across sessions: this is what makes a second quiz test
+      // what is still unknown rather than starting over.
+      const masteryStore = new SessionStore({ projectDir });
+      try {
+        const updates = applyQuizToMastery(
+          questions,
+          answers,
+          mastery!,
+          new Date().toISOString(),
+        );
+        for (const update of updates) masteryStore.saveMastery(update.after);
+        for (const line of renderMastery(updates)) io.out(line);
+      } finally {
+        masteryStore.close();
+      }
 
       recordRoundFor(projectDir, io, {
         phaseId: 'OB-F',

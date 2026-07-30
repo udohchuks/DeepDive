@@ -90,6 +90,25 @@ deepdive quiz --project ./study
 deepdive complete --project ./study
 ```
 
+`quiz` keeps a question bank per project and tracks mastery per concept, both of which outlive the process. The first run writes questions and banks them; later runs draw from the bank, favouring concepts you have not yet mastered, and generate only to fill a shortfall:
+
+```
+$ deepdive quiz          # first run
+5 questions (5 newly written).
+
+$ deepdive quiz          # later run — no API key needed, nothing generated
+5 questions from your bank of 5.
+```
+
+A concept counts as mastered after two correct answers *and* only while most attempts on it stay correct — one right answer on a four-option question is one-in-four by guessing, and the flag is meant to say "knows this now" rather than "once got two right", so it can be lost again:
+
+```
+concept mastery:
+  impl: mastered  ← newly mastered
+  …
+  impl: 2/3  ← no longer mastered
+```
+
 Note `repo-charter`, not `charter`: the greenfield charter says what you will build, the repo learning charter says what you intend to learn from code that already exists, and they are graded at different phases.
 
 The commit is pinned at clone time, not resolved per submission: upstream moves, and evidence checked against a moving target would pass one day and fail the next with your work unchanged.
@@ -154,6 +173,6 @@ Codebase Onboarding is runnable from the CLI: `onboard` clones and pins, and `gr
 
 All seven onboarding phases OB-A through OB-G are reachable from the CLI, and the leveled hint ladder is wired to both modes with reveals rolling into the completion record's hint profile.
 
-Not yet wired: the VS Code extension is not a loadable extension. The quiz bank and mastery/concept tracking (`QuizItem`, `Concept`, `MasteryState` in core, `quizzes` in storage) are schema-only — `deepdive quiz` generates questions per run rather than drawing on a persisted bank, so nothing tracks mastery of a concept across sessions.
+Not yet wired: the VS Code extension is not a loadable extension. The `Concept` schema (prerequisites, categories) is unused — concept ids come from whatever the quiz generator labels a question with, so there is no prerequisite graph ordering what gets tested. Quiz items other than multiple choice (`structured_trace`, `invariant_explanation`) are storable but never drawn, since scoring them would need a model and the quiz would stop being deterministic.
 
 Licensed MIT. Packages declare `files`, pinned `engines` and public `publishConfig`, and `npm pack` includes the migration SQL the built runner resolves at run time, so `npm publish --workspaces` is unblocked.

@@ -8,11 +8,15 @@ import {
   CompletionRecordSchema,
   CryptoIdGenerator,
   HintProfileEntry,
+  MasteryState,
   ModelProvider,
   PhaseId,
   SystemClock,
   TestRunResult,
   TestRunner,
+  byTestingPriority,
+  emptyMastery,
+  recordAttempt,
 } from '@deepdive/core';
 import { LocalTestRunner } from '@deepdive/engine';
 import { GraderPrompt } from '@deepdive/content';
@@ -125,6 +129,105 @@ export async function generateQuiz(
   // A "correct" answer that is not among the options would be unanswerable, so
   // the question is dropped rather than shown and marked wrong whatever is said.
   return set.questions.filter((q) => q.options.includes(q.correctAnswer));
+}
+
+/**
+ * Chooses which questions to ask, preferring concepts not yet mastered.
+ *
+ * The bank is consulted before generating anything: a question already written
+ * costs nothing to re-ask, and asking the same student the same question again
+ * after they got it wrong is how the mastery counter is supposed to move. New
+ * questions are generated only to make up the shortfall.
+ *
+ * Deterministic given the same bank and mastery state — no shuffling — so a
+ * re-run of an unchanged project asks the same questions in the same order.
+ */
+export function selectFromBank(
+  bank: readonly QuizQuestion[],
+  mastery: readonly MasteryState[],
+  count: number,
+): { chosen: QuizQuestion[]; shortfall: number } {
+  const stateOf = new Map(mastery.map((m) => [m.conceptId, m]));
+
+  const ranked = [...bank].sort((a, b) => {
+    const left = stateOf.get(a.conceptId) ?? emptyMastery(a.conceptId);
+    const right = stateOf.get(b.conceptId) ?? emptyMastery(b.conceptId);
+    const priority = byTestingPriority(left, right);
+    // Stable within equal priority, so the order does not wobble between runs.
+    return priority !== 0 ? priority : a.id.localeCompare(b.id);
+  });
+
+  const chosen: QuizQuestion[] = [];
+  const usedConcepts = new Set<string>();
+
+  // One question per concept first: breadth across what is untested beats
+  // several questions about whichever concept happens to have the most banked.
+  for (const question of ranked) {
+    if (chosen.length >= count) break;
+    if (usedConcepts.has(question.conceptId)) continue;
+    chosen.push(question);
+    usedConcepts.add(question.conceptId);
+  }
+
+  for (const question of ranked) {
+    if (chosen.length >= count) break;
+    if (!chosen.includes(question)) chosen.push(question);
+  }
+
+  return { chosen, shortfall: Math.max(0, count - chosen.length) };
+}
+
+export interface MasteryUpdate {
+  conceptId: string;
+  before: MasteryState;
+  after: MasteryState;
+}
+
+/**
+ * Folds a quiz's answers into per-concept mastery.
+ *
+ * One attempt per question, so a concept asked about twice in one quiz counts
+ * twice — the counter measures answers given, not topics seen.
+ */
+export function applyQuizToMastery(
+  questions: readonly QuizQuestion[],
+  answers: readonly string[],
+  existing: readonly MasteryState[],
+  testedAt: string,
+): MasteryUpdate[] {
+  const current = new Map(existing.map((m) => [m.conceptId, m]));
+  const before = new Map(current);
+
+  questions.forEach((question, index) => {
+    const state = current.get(question.conceptId) ?? emptyMastery(question.conceptId);
+    current.set(
+      question.conceptId,
+      recordAttempt(state, answers[index] === question.correctAnswer, testedAt),
+    );
+  });
+
+  return [...current.entries()]
+    .filter(([conceptId]) => questions.some((q) => q.conceptId === conceptId))
+    .map(([conceptId, after]) => ({
+      conceptId,
+      before: before.get(conceptId) ?? emptyMastery(conceptId),
+      after,
+    }));
+}
+
+/** Renders what changed, so progress across sessions is visible. */
+export function renderMastery(updates: readonly MasteryUpdate[]): string[] {
+  if (updates.length === 0) return [];
+
+  const lines = ['', 'concept mastery:'];
+  for (const { conceptId, before, after } of updates) {
+    const newlyMastered = after.mastered && !before.mastered;
+    const lost = before.mastered && !after.mastered;
+    const mark = after.mastered ? 'mastered' : `${after.successCount}/${after.attemptsCount}`;
+    const note = newlyMastered ? '  ← newly mastered' : lost ? '  ← no longer mastered' : '';
+    lines.push(`  ${conceptId}: ${mark}${note}`);
+  }
+  return lines;
 }
 
 export interface QuizScore {

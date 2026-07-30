@@ -9,6 +9,7 @@ export * from './domain/rubric.js';
 export * from './domain/hints.js';
 export * from './domain/quiz.js';
 export * from './domain/reading_plan.js';
+export * from './domain/mastery.js';
 export * from './domain/completion.js';
 export * from './domain/config.js';
 

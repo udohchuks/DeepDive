@@ -198,3 +198,58 @@ describe('agent runs recorded as rounds', () => {
     store.close();
   });
 });
+
+describe('PROTECTED INVARIANT: the quiz bank and mastery survive the process', () => {
+  const item = (id: string, conceptId: string) => ({
+    id,
+    conceptId,
+    type: 'multiple_choice' as const,
+    question: `q-${id}`,
+    options: ['a', 'b'],
+    correctAnswer: 'a',
+    explanation: 'e',
+  });
+
+  it('reads back questions banked by an earlier run', () => {
+    const dir = tempProject();
+    const first = new SessionStore({ projectDir: dir });
+    first.bankQuizItem(item('q1', 'auth'));
+    first.close();
+
+    // The whole point of a bank: a second session draws on the first.
+    const second = new SessionStore({ projectDir: dir });
+    expect(second.quizBank().map((q) => q.id)).toEqual(['q1']);
+    expect(second.quizBank()[0]!.options).toEqual(['a', 'b']);
+    second.close();
+  });
+
+  it('ignores a question already banked under the same wording', () => {
+    const dir = tempProject();
+    const store = new SessionStore({ projectDir: dir });
+
+    store.bankQuizItem(item('q1', 'auth'));
+    // Generation runs again every quiz; without dedupe the bank fills with
+    // near-copies and crowds out the concepts still untested.
+    expect(() => store.bankQuizItem({ ...item('q2', 'auth'), question: 'q-q1' })).not.toThrow();
+    expect(store.quizBank()).toHaveLength(1);
+    store.close();
+  });
+
+  it('carries mastery across store instances', () => {
+    const dir = tempProject();
+    const first = new SessionStore({ projectDir: dir });
+    first.saveMastery({ conceptId: 'auth', attemptsCount: 1, successCount: 1, mastered: false });
+    first.close();
+
+    const second = new SessionStore({ projectDir: dir });
+    second.saveMastery({ conceptId: 'auth', attemptsCount: 2, successCount: 2, mastered: true });
+    second.close();
+
+    const third = new SessionStore({ projectDir: dir });
+    // Upserted, not appended: a summary of attempts, not an event log.
+    expect(third.masteryStates()).toEqual([
+      { conceptId: 'auth', attemptsCount: 2, successCount: 2, lastTestedAt: undefined, mastered: true },
+    ]);
+    third.close();
+  });
+});

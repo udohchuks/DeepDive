@@ -8,6 +8,8 @@ import {
   RoundRepository,
   ArtifactRepository,
   HintRepository,
+  MasteryRepository,
+  QuizRepository,
   RoundRecord,
 } from '@deepdive/storage';
 import {
@@ -15,6 +17,8 @@ import {
   Finding,
   Hint,
   HintLevel,
+  MasteryState,
+  QuizItem,
   IdGenerator,
   PhaseId,
   SystemClock,
@@ -98,6 +102,8 @@ export class SessionStore {
   private readonly rounds: RoundRepository;
   private readonly artifacts: ArtifactRepository;
   private readonly hints: HintRepository;
+  private readonly quizzes: QuizRepository;
+  private readonly mastery: MasteryRepository;
   private readonly clock: Clock;
   private readonly ids: IdGenerator;
 
@@ -118,6 +124,8 @@ export class SessionStore {
     this.rounds = new RoundRepository(this.db);
     this.artifacts = new ArtifactRepository(this.db);
     this.hints = new HintRepository(this.db);
+    this.quizzes = new QuizRepository(this.db);
+    this.mastery = new MasteryRepository(this.db);
 
     this.projectId = this.ensureProject(
       options.projectName ?? path.basename(path.resolve(options.projectDir)),
@@ -250,6 +258,25 @@ export class SessionStore {
     }
 
     return null;
+  }
+
+  /** Every question banked for this project, across all sessions. */
+  quizBank(): QuizItem[] {
+    return this.quizzes.getQuizzesForProject(this.projectId);
+  }
+
+  /** Banks a question. Re-banking one already stored is a no-op, not an error. */
+  bankQuizItem(item: QuizItem): void {
+    this.quizzes.saveQuizItem(this.projectId, item);
+  }
+
+  /** Per-concept mastery, carried across runs — the point of tracking it. */
+  masteryStates(): MasteryState[] {
+    return this.mastery.getAllStates(this.projectId);
+  }
+
+  saveMastery(state: MasteryState): void {
+    this.mastery.saveState(this.projectId, state);
   }
 
   /** Hints already revealed for a turn, oldest first. */
