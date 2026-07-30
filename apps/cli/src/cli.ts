@@ -2,6 +2,12 @@ import { readFile } from 'fs/promises';
 import { createModelProvider } from '@deepdive/provider';
 import { buildDoctorReport } from './doctor.js';
 import { CLI_RUBRICS, runGrade } from './grade.js';
+import {
+  assertSandboxAvailable,
+  buildRoleModel,
+  runScaffold,
+  runVerify,
+} from './agent_commands.js';
 
 export const USAGE = `deepdive — guided project learning, run locally
 
@@ -13,6 +19,13 @@ Usage:
   deepdive grade <rubric> <artifact.json>
       Run the deterministic gate, then grade judged criteria with the model.
       Rubrics: ${Object.keys(CLI_RUBRICS).join(', ')}
+
+  deepdive scaffold <workspace> <instruction>
+      Run the Scaffolder against a workspace (write/edit/bash, path-scoped).
+      Cannot write graded artifacts. Requires a working sandbox.
+
+  deepdive verify <workspace> <instruction>
+      Run the Verifier against a workspace (read-only). Requires a sandbox.
 
 Configuration is read from the environment. Load a .env file with Node's own
 loader, which keeps the key out of your shell history:
@@ -58,6 +71,28 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       const payload = JSON.parse(raw) as Record<string, unknown>;
 
       const result = await runGrade(rubricName, payload, createModelProvider());
+      for (const line of result.lines) io.out(line);
+      return 0;
+    }
+
+    if (command === 'scaffold' || command === 'verify') {
+      const [workspace, ...instructionParts] = rest;
+      const instruction = instructionParts.join(' ');
+      if (!workspace || !instruction) {
+        io.err(`Usage: deepdive ${command} <workspace> <instruction>`);
+        return 1;
+      }
+
+      // Check the sandbox before building a model runtime: if the role cannot
+      // run at all, say so immediately rather than after resolving credentials.
+      assertSandboxAvailable();
+
+      const model = await buildRoleModel();
+      const result =
+        command === 'scaffold'
+          ? await runScaffold(workspace, instruction, model)
+          : await runVerify(workspace, instruction, model);
+
       for (const line of result.lines) io.out(line);
       return 0;
     }

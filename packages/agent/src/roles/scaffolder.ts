@@ -1,4 +1,5 @@
 import { AgentSession, createRoleSession, RoleSessionOptions } from '../sdk/pi_contract.js';
+import { RoleModel } from '../sdk/role_model.js';
 import { createPermissionHook } from '../hooks/permission_hook.js';
 import { PathPolicyEvaluator } from '@deepdive/sandbox';
 
@@ -19,6 +20,12 @@ export function buildScaffolderSessionOptions(
 export function createScaffolderSession(
   pathEvaluator: PathPolicyEvaluator,
   gradedArtifactPaths?: string[],
+  model?: RoleModel,
+  cwd?: string,
 ): Promise<AgentSession> {
-  return createRoleSession(buildScaffolderSessionOptions(pathEvaluator, gradedArtifactPaths));
+  return createRoleSession({
+    ...buildScaffolderSessionOptions(pathEvaluator, gradedArtifactPaths),
+    model,
+    cwd,
+  });
 }

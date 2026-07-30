@@ -1,4 +1,5 @@
 import { AgentSession, createRoleSession, RoleSessionOptions } from '../sdk/pi_contract.js';
+import { RoleModel } from '../sdk/role_model.js';
 import { createPermissionHook } from '../hooks/permission_hook.js';
 
 /**
@@ -17,6 +18,6 @@ export function buildVerifierSessionOptions(): RoleSessionOptions {
   };
 }
 
-export function createVerifierSession(): Promise<AgentSession> {
-  return createRoleSession(buildVerifierSessionOptions());
+export function createVerifierSession(model?: RoleModel, cwd?: string): Promise<AgentSession> {
+  return createRoleSession({ ...buildVerifierSessionOptions(), model, cwd });
 }

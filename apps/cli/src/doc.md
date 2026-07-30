@@ -28,7 +28,9 @@ node --env-file=.env node_modules/.bin/deepdive grade charter ./my-charter.json
 ## Constraints & gotchas
 - **`grade` spends money.** It issues a real model call at temperature 0 against the pinned model whenever the deterministic gate passes and the rubric has judged criteria. `doctor` never does.
 - The sandbox preflight is fail-closed. On Windows it requires **both** WSL2 and bubblewrap inside it; `doctor` reports `unsupported` with remediation text rather than silently running unsandboxed.
-- The CLI constructs the Grader only. Scaffolder and Verifier run on the pi coding-agent harness and are not yet wired to a command.
+- `scaffold` and `verify` run tool-using roles against a real workspace, so they check the sandbox **before** resolving credentials and refuse to run when it is unavailable. There is no unsandboxed fallback.
+- Role sessions authenticate through `createRoleModel`, which installs the key as pi's *non-persistent* runtime credential. The key is never written to pi's `auth.json`, and pi's own credential discovery is never consulted — our `KeyStore` stays the single source.
+- pi's `setRuntimeApiKey` triggers a model-catalog refresh whose default options permit network access; that refresh is pinned offline, since a catalog fetch to an unreachable host hangs the command instead of failing.
 - Requires Node **22.19.0** (`.nvmrc`), raised from 22.12.0 because `@earendil-works/pi-ai` and `pi-coding-agent` both require `>=22.19.0`.
 
 ## Tests

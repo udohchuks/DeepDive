@@ -1,3 +1,5 @@
+import { spawnSync } from 'child_process';
+
 export type PreflightStatus =
   | 'linux-ok'
   | 'macos-ok'
@@ -17,13 +19,39 @@ export interface SystemProbes {
   commandExists: (cmd: string, args?: string[]) => boolean;
 }
 
+/**
+ * Real capability probe: runs the command and reports whether it succeeded.
+ *
+ * This used to be a stub that returned false unconditionally, with a comment
+ * claiming a production probe was injected at runtime. Nothing ever injected
+ * one, so preflight reported "unsupported" on every machine including ones with
+ * a perfectly good sandbox — the failure looked exactly like a genuinely
+ * missing facility, which is why it survived.
+ *
+ * Arguments are passed as an argv array with no shell, so a command string can
+ * never be reinterpreted. Any non-zero exit, timeout, or spawn error is false:
+ * an inconclusive probe must not be read as a working sandbox.
+ */
+export function probeCommand(cmd: string, args: string[] = []): boolean {
+  try {
+    const result = spawnSync(cmd, args, {
+      stdio: 'ignore',
+      timeout: PROBE_TIMEOUT_MS,
+      windowsHide: true,
+      shell: false,
+    });
+    return result.error === undefined && result.status === 0;
+  } catch {
+    return false;
+  }
+}
+
+/** WSL can take several seconds to cold-start a stopped distro. */
+const PROBE_TIMEOUT_MS = 20_000;
+
 export function runPreflight(probes?: SystemProbes): PreflightResult {
   const platform = probes?.platform() ?? process.platform;
-  const commandExists =
-    probes?.commandExists ??
-    ((_cmd: string) => {
-      return false; // Production probe override passed at runtime
-    });
+  const commandExists = probes?.commandExists ?? probeCommand;
 
   // Every platform must fail closed: a missing sandbox facility is unsupported,
   // never "supported with a remediation note". There is no unsandboxed fallback.

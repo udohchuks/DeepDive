@@ -15,6 +15,7 @@ import type {
   ToolCallEventResult,
   ToolDefinition,
 } from '@earendil-works/pi-coding-agent';
+import type { RoleModel } from './role_model.js';
 
 /**
  * Adapter over the real pi coding-agent SDK.
@@ -89,6 +90,11 @@ export interface RoleSessionOptions {
   customTools?: ToolDefinition[];
   hook: ToolCallHook;
   cwd?: string;
+  /**
+   * Model and runtime for this session, built from our own KeyStore via
+   * createRoleModel. Omitted only by tests that never issue a model call.
+   */
+  model?: RoleModel;
   /** Injectable for tests so no test constructs a real model runtime. */
   createSession?: (options: CreateAgentSessionOptions) => Promise<CreateAgentSessionResult>;
 }
@@ -135,6 +141,9 @@ export async function createRoleSession(options: RoleSessionOptions): Promise<Pi
   const create = options.createSession ?? piCreateAgentSession;
   const { session } = await create({
     ...buildRoleSessionOptions(options),
+    ...(options.model
+      ? { model: options.model.model, modelRuntime: options.model.runtime }
+      : {}),
     resourceLoader,
     settingsManager,
     sessionManager: SessionManager.inMemory(),

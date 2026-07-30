@@ -40,6 +40,7 @@ const check = evaluator.evaluateWriteAccess('/repo/tests/unit.test.ts');
 - `PathPolicyEvaluator` requires path canonicalization before matching to prevent symlink escape attacks.
 - Windows requires **both** WSL2 and bubblewrap installed *inside* it. WSL2 on its own is a VM boundary, not a path-level policy, so preflight blocks with install instructions when bwrap is missing in the VM.
 - Windows paths are translated to `/mnt/<drive>/...` before the policy is applied. UNC paths (`\\server\share`) and relative paths cannot be expressed inside WSL2 and are **rejected**, not guessed at — a mount policy that silently dropped a path would grant or deny the wrong thing. Translation failure fails the run; it never falls through to an unsandboxed execution.
+- **Preflight now probes for real.** The default `commandExists` was a stub returning `false` unconditionally, with a comment claiming a production probe was injected at runtime — nothing ever injected one. Preflight therefore reported "unsupported" on *every* machine, including ones with a working sandbox, and the bug hid because its output was indistinguishable from a genuinely missing facility. `probeCommand` now runs the command (argv array, no shell) and treats any non-zero exit, timeout, or spawn error as false.
 - Real out-of-boundary execution is verified only on Linux with bubblewrap installed. On other hosts those two tests skip and emit an explicit warning; CI installs bubblewrap so they always run there.
 
 ## Tests

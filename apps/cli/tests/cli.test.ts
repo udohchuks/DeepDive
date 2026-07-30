@@ -4,6 +4,12 @@ import { ModelProvider, ModelRequestOptions } from '@deepdive/core';
 import { runCli, CliIo } from '../src/cli.js';
 import { buildDoctorReport } from '../src/doctor.js';
 import { runGrade, GraderVerdictSchema, CLI_RUBRICS } from '../src/grade.js';
+import {
+  assertSandboxAvailable,
+  resolveRoleModelConfig,
+  SandboxUnavailableError,
+} from '../src/agent_commands.js';
+import { runPreflight } from '@deepdive/sandbox';
 
 function captureIo(): CliIo & { lines: string[]; errors: string[] } {
   const lines: string[] = [];
@@ -106,6 +112,38 @@ describe('deepdive CLI', () => {
     for (const name of Object.keys(CLI_RUBRICS)) {
       expect(CLI_RUBRICS[name]!.criteria.length).toBeGreaterThan(0);
     }
+  });
+
+  it('scaffold and verify require both a workspace and an instruction', async () => {
+    for (const command of ['scaffold', 'verify']) {
+      const io = captureIo();
+      expect(await runCli([command, './workspace'], io)).toBe(1);
+      expect(io.errors.join('\n')).toContain(`deepdive ${command} <workspace> <instruction>`);
+    }
+  });
+
+  it('PROTECTED INVARIANT: tool-using roles refuse to run without a sandbox', () => {
+    const preflight = runPreflight();
+    if (preflight.isSupported) {
+      expect(() => assertSandboxAvailable()).not.toThrow();
+      return;
+    }
+    // Fail-closed: no unsandboxed fallback exists for roles that execute tools.
+    expect(() => assertSandboxAvailable()).toThrow(SandboxUnavailableError);
+    expect(() => assertSandboxAvailable()).toThrow(/do not run unsandboxed/);
+  });
+
+  it('role sessions use the same pinned model as the Grader, not a separate one', () => {
+    const config = resolveRoleModelConfig({ MODEL_PROVIDER: 'deepseek' } as NodeJS.ProcessEnv);
+    expect(config.providerId).toBe('deepseek');
+    expect(config.modelId).toBe('deepseek-chat');
+    // A moving alias here would change the agent between submissions (D-5).
+    expect(config.modelId).not.toMatch(/latest|\*/i);
+  });
+
+  it('treats the claude alias as the anthropic provider', () => {
+    const config = resolveRoleModelConfig({ MODEL_PROVIDER: 'claude' } as NodeJS.ProcessEnv);
+    expect(config.providerId).toBe('anthropic');
   });
 
   it('the verdict schema accepts every documented exit state', () => {
