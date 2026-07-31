@@ -22,6 +22,12 @@
   "contributes": {
     "commands": [
       {
+        "command": "deepdive.open",
+        "title": "Open workspace panel",
+        "category": "DeepDive",
+        "icon": "$(mortar-board)"
+      },
+      {
         "command": "deepdive.grade",
         "title": "Grade this artifact",
         "category": "DeepDive",
@@ -64,8 +70,15 @@
     "views": {
       "deepdive": [
         {
+          "id": "deepdive.interactiveView",
+          "name": "Workspace",
+          "type": "webview",
+          "icon": "$(mortar-board)"
+        },
+        {
           "id": "deepdive.progress",
-          "name": "Progress"
+          "name": "History",
+          "icon": "$(history)"
         }
       ]
     },

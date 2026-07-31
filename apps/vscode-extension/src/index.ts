@@ -8,5 +8,8 @@ export * from './deepdive_client.js';
 export * from './diagnostics.js';
 export * from './tree_model.js';
 export * from './hint_view.js';
+export * from './forms.js';
+export * from './panel_view.js';
+export * from './sidebar_provider.js';
 export * from './ui/hint_panel.js';
 export * from './ui/struggle_modal.js';

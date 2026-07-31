@@ -1,6 +1,8 @@
+import * as fs from 'fs';
 import * as path from 'path';
 import { execFile } from 'child_process';
 import * as vscode from 'vscode';
+import { DeepDiveSidebarProvider, SidebarHost, SidebarMessage } from './sidebar_provider.js';
 import {
   CliResult,
   DeepDiveClient,
@@ -26,6 +28,7 @@ interface ExtensionState {
   client: DeepDiveClient;
   diagnostics: vscode.DiagnosticCollection;
   tree: DeepDiveTreeProvider;
+  sidebar: InteractiveSidebar;
   status: vscode.StatusBarItem;
   output: vscode.OutputChannel;
 }
@@ -108,6 +111,59 @@ class DeepDiveTreeProvider implements vscode.TreeDataProvider<TreeNode> {
     if (node.description) item.tooltip = `${node.label}\n\n${node.description}`;
 
     return item;
+  }
+}
+
+/**
+ * Binds the sidebar state machine to a real webview.
+ *
+ * The state machine holds no `vscode` types, so this is the whole adapter: it
+ * hands over a way to draw, read and write files, and answer where the project
+ * is. Everything else about the panel is tested without an editor.
+ */
+class InteractiveSidebar implements vscode.WebviewViewProvider {
+  private view: vscode.WebviewView | undefined;
+  private readonly provider: DeepDiveSidebarProvider;
+
+  constructor(client: DeepDiveClient) {
+    const host: SidebarHost = {
+      render: (html) => {
+        if (this.view) this.view.webview.html = html;
+      },
+      readFile: (file) => {
+        try {
+          return fs.readFileSync(file, 'utf8');
+        } catch {
+          return null;
+        }
+      },
+      writeFile: (file, contents) => fs.writeFileSync(file, contents, 'utf8'),
+      join: (...parts) => path.join(...parts),
+      projectDir,
+      showError: (message) => vscode.window.showErrorMessage(message),
+    };
+
+    this.provider = new DeepDiveSidebarProvider(host, client);
+  }
+
+  resolveWebviewView(view: vscode.WebviewView): void {
+    this.view = view;
+    view.webview.options = { enableScripts: true };
+    view.webview.onDidReceiveMessage((message: SidebarMessage) => {
+      void this.provider.handleMessage(message);
+    });
+
+    void this.provider.initialize();
+  }
+
+  /** Brings the panel forward and re-reads the project. */
+  async focus(): Promise<void> {
+    await vscode.commands.executeCommand('deepdive.interactiveView.focus');
+    await this.provider.handleMessage({ type: 'refresh' });
+  }
+
+  async refresh(): Promise<void> {
+    await this.provider.handleMessage({ type: 'refresh' });
   }
 }
 
@@ -206,6 +262,9 @@ async function gradeCurrentFile(state: ExtensionState): Promise<void> {
         vscode.window.showErrorMessage(err instanceof Error ? err.message : String(err));
       } finally {
         await refresh(state);
+        // The panel shows the same rounds, so grading from the editor must not
+        // leave it displaying a stale verdict.
+        await state.sidebar.refresh();
       }
     },
   );
@@ -268,24 +327,31 @@ async function showHint(state: ExtensionState, level?: string): Promise<void> {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+  const client = new DeepDiveClient(createRunner());
   const state: ExtensionState = {
-    client: new DeepDiveClient(createRunner()),
+    client,
     diagnostics: vscode.languages.createDiagnosticCollection('deepdive'),
     tree: new DeepDiveTreeProvider(),
+    sidebar: new InteractiveSidebar(client),
     status: vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100),
     output: vscode.window.createOutputChannel('DeepDive'),
   };
 
-  state.status.command = 'deepdive.studio';
+  state.status.command = 'deepdive.open';
 
   context.subscriptions.push(
     state.diagnostics,
     state.status,
     state.output,
+    vscode.window.registerWebviewViewProvider('deepdive.interactiveView', state.sidebar),
     vscode.window.registerTreeDataProvider('deepdive.progress', state.tree),
+    vscode.commands.registerCommand('deepdive.open', () => state.sidebar.focus()),
     vscode.commands.registerCommand('deepdive.grade', () => gradeCurrentFile(state)),
     vscode.commands.registerCommand('deepdive.hint', () => showHint(state)),
-    vscode.commands.registerCommand('deepdive.refresh', () => refresh(state)),
+    vscode.commands.registerCommand('deepdive.refresh', async () => {
+      await refresh(state);
+      await state.sidebar.refresh();
+    }),
     vscode.commands.registerCommand('deepdive.studio', async () => {
       const dir = projectDir();
       if (!dir) return;

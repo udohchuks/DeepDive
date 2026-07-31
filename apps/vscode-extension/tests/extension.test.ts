@@ -302,6 +302,7 @@ describe('PROTECTED INVARIANT P-2: the UI cannot ask the AI to do the work', () 
       'deepdive.doctor',
       'deepdive.grade',
       'deepdive.hint',
+      'deepdive.open',
       'deepdive.refresh',
       'deepdive.studio',
     ]);

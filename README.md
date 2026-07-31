@@ -179,12 +179,49 @@ npm run build
 
 To use it in a normal window instead of the debug host, set `deepdive.cliPath` to your built `apps/cli/dist/bin.js`.
 
-What it adds over the CLI:
+The **DeepDive** icon in the activity bar opens the workspace panel — a form per phase, not a JSON file to guess at:
 
-- **Rejections appear on the line that caused them.** Grading `charter.json` puts each finding in the Problems panel, underlining the field its message names. This is the one thing the editor does that a terminal cannot.
-- **A sidebar** with the phase track, the studio's consistency numbers, and round history — each round expanding into its findings.
+```
+A · Project charter                       ▾
+What you are building, and what you
+are deliberately not building.
+
+ A  B  OB-A  OB-B  OB-C  OB-E
+ 2       0          1d        1
+ ROUNDS  APPROVED   STREAK    ACTIVE DAYS
+
+ Goal
+ What a user will be able to do, and what
+ you intend to learn by building it.
+ ┌────────────────────────────────────────┐
+ │ Merge two exported bookmark files      │
+ └────────────────────────────────────────┘
+ ⚠ The goal statement is too vague. It does
+   not specify the problem domain…
+
+ Scope bounds
+ ┌──────────────────────────────────┐ ┌───┐
+ │ No browser extension             │ │ ✕ │
+ └──────────────────────────────────┘ └───┘
+ [ + add ]
+
+ [ Submit for grading ]  [ Save draft ]
+ ▸ Hints — on charter_goal_clarity
+ ▸ History (2)
+```
+
+The rejection sits under the box that caused it. That works for judged criteria too, not just the deterministic gate: each field declares which rubric criteria concern it, so a Grader comment about your goal lands under *Goal*.
+
+The panel writes the artifact file and grades **the file**, so the editor and the panel never disagree about what was submitted, and hand-editing `charter.json` then reopening the panel shows what is actually on disk.
+
+Also in the editor:
+
+- **Rejections as diagnostics.** Grading from the editor puts each finding in the Problems panel, underlining the field its message names.
+- **A history tree** with the phase track, consistency numbers, and every round expanding into its findings.
 - **The current phase in the status bar**, with the streak beside it when one is live.
-- **The hint ladder as a panel**, every revealed rung on screen, with a *Reveal next* button that disappears at L4 because there is nothing above it to ask for.
+- **The hint ladder**, every revealed rung on screen, with a *Reveal next* button that disappears at L4 because there is nothing above it to ask for.
+
+Every phase stays selectable. Locking them until the previous one is approved would mean the tool decides what you work on next, and the order of your own work is yours.
 
 Commands: `DeepDive: Grade this artifact`, `Show hint`, `Show studio`, `Refresh`, `Check configuration`.
 
