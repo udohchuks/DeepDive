@@ -27,6 +27,15 @@ export const FindingSchema = z
     code: FindingCodeSchema,
     severity: FindingSeveritySchema,
     targetFieldId: z.string().regex(FieldIdRegex),
+    /**
+     * Why this finding was raised, in words the student can act on.
+     *
+     * A criterion id alone ("charter_scope_bounded") names the rule but not the
+     * fix, and the deterministic gate is the half of grading meant to teach for
+     * free — without this, a rejection pushes the student toward a hint, which
+     * costs a model call, to learn something a code check already knew.
+     */
+    message: z.string().optional(),
     filePath: z.string().optional(),
     lineStart: z.number().int().nonnegative().optional(),
     lineEnd: z.number().int().nonnegative().optional(),

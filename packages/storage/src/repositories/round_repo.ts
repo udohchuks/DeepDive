@@ -42,6 +42,7 @@ interface FindingDbRow {
   code: FindingCode;
   severity: FindingSeverity;
   target_field_id: string;
+  message: string | null;
   file_path: string | null;
   line_start: number | null;
   line_end: number | null;
@@ -73,7 +74,7 @@ export class RoundRepository {
     );
 
     const insertFinding = this.db.prepare(
-      'INSERT INTO findings (id, turn_id, code, severity, target_field_id, file_path, line_start, line_end, pass_count, fail_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO findings (id, turn_id, code, severity, target_field_id, message, file_path, line_start, line_end, pass_count, fail_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     );
 
     this.db.transaction(() => {
@@ -85,6 +86,7 @@ export class RoundRepository {
           f.code,
           f.severity,
           f.targetFieldId,
+          f.message ?? null,
           f.filePath ?? null,
           f.lineStart ?? null,
           f.lineEnd ?? null,
@@ -148,7 +150,7 @@ export class RoundRepository {
   getFindingsForTurn(turnId: string): Finding[] {
     const rows = this.db
       .prepare(
-        'SELECT id, code, severity, target_field_id, file_path, line_start, line_end, pass_count, fail_count FROM findings WHERE turn_id = ? ORDER BY id ASC',
+        'SELECT id, code, severity, target_field_id, message, file_path, line_start, line_end, pass_count, fail_count FROM findings WHERE turn_id = ? ORDER BY id ASC',
       )
       .all(turnId) as FindingDbRow[];
 
@@ -157,6 +159,10 @@ export class RoundRepository {
       code: f.code,
       severity: f.severity,
       targetFieldId: f.target_field_id,
+      // Rounds recorded before the message column existed read back as
+      // undefined rather than an empty string, so a caller can tell "no reason
+      // was captured" from "the reason was blank".
+      message: f.message ?? undefined,
       filePath: f.file_path ?? undefined,
       lineStart: f.line_start ?? undefined,
       lineEnd: f.line_end ?? undefined,

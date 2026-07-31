@@ -93,6 +93,7 @@ export async function runGrade(
     lines.push('deterministic gate: FAILED — no model call made');
     for (const finding of gate.failedFindings) {
       lines.push(`  - [${finding.severity}] ${finding.code} on ${finding.targetFieldId}`);
+      if (finding.message) lines.push(`      ${finding.message}`);
     }
     return { lines, shortCircuited: true, findings: gate.failedFindings };
   }
@@ -142,6 +143,9 @@ export async function runGrade(
       code: 'BOUND_VIOLATED',
       severity: 'error',
       targetFieldId: c.criterionId,
+      // The Grader's comment was printed and then thrown away, so `history`
+      // could show that an old round was rejected but never why.
+      message: c.comment,
     }));
 
   return { lines, shortCircuited: false, verdict, findings: unmet };

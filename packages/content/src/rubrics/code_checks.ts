@@ -9,33 +9,56 @@ export type CodeCheckFn = (artifactPayload: Record<string, unknown>) => CodeChec
 
 const VALID_LEVELS = new Set(['L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7']);
 
+/**
+ * Messages name the JSON field they are about.
+ *
+ * "Scope bounds must contain at least one element" reads fine until you have
+ * written `scope` and `outOfScope` and cannot tell that the key it wants is
+ * `scopeBounds`. The student has no schema in front of them, so a message that
+ * describes the rule without naming the field sends them guessing.
+ */
+
 export const CodeCheckRegistry: Record<string, CodeCheckFn> = {
   check_non_empty_title: (payload) => {
     const title = payload.title;
     const passed = typeof title === 'string' && title.trim().length > 0;
-    return { passed, message: passed ? undefined : 'Title must be a non-empty string' };
+    return {
+      passed,
+      message: passed ? undefined : '"title" must be a non-empty string.',
+    };
   },
 
   check_scope_bounds_present: (payload) => {
     const bounds = payload.scopeBounds;
     const passed = Array.isArray(bounds) && bounds.length > 0;
-    return { passed, message: passed ? undefined : 'Scope bounds must contain at least one element' };
+    return {
+      passed,
+      message: passed
+        ? undefined
+        : '"scopeBounds" must be a non-empty array naming what this project will not do.',
+    };
   },
 
   check_modules_non_empty: (payload) => {
     const modules = payload.modules;
     const passed = Array.isArray(modules) && modules.length > 0;
-    return { passed, message: passed ? undefined : 'Modules array must not be empty' };
+    return {
+      passed,
+      message: passed ? undefined : '"modules" must be a non-empty array.',
+    };
   },
 
   check_citations_valid: (payload) => {
     const modules = payload.modules;
-    if (!Array.isArray(modules)) return { passed: false, message: 'Invalid modules payload' };
+    if (!Array.isArray(modules)) return { passed: false, message: '"modules" must be an array.' };
     for (const mod of modules) {
       if (mod && typeof mod === 'object' && 'citations' in mod && Array.isArray(mod.citations)) {
         for (const citation of mod.citations) {
           if (!citation || typeof citation !== 'object' || !('filePath' in citation) || typeof citation.filePath !== 'string') {
-            return { passed: false, message: 'Citation missing valid filePath' };
+            return {
+              passed: false,
+              message: 'Every citation in "modules[].citations" needs a string "filePath".',
+            };
           }
         }
       }
@@ -46,7 +69,10 @@ export const CodeCheckRegistry: Record<string, CodeCheckFn> = {
   check_rsdd_level: (payload) => {
     const level = payload.level;
     const passed = typeof level === 'string' && VALID_LEVELS.has(level);
-    return { passed, message: passed ? undefined : 'RSDD level must be between L1 and L7' };
+    return {
+      passed,
+      message: passed ? undefined : '"level" must be one of L1 through L7.',
+    };
   },
 
   /**
@@ -94,7 +120,10 @@ export const CodeCheckRegistry: Record<string, CodeCheckFn> = {
   check_characterization_test_path: (payload) => {
     const testPath = payload.characterizationTestPath ?? payload.testPath;
     const passed = typeof testPath === 'string' ? testPath.trim().length > 0 : true;
-    return { passed, message: passed ? undefined : 'Characterization test path must be non-empty string' };
+    return {
+      passed,
+      message: passed ? undefined : '"characterizationTestPath" must be a non-empty string.',
+    };
   },
 
   /**

@@ -160,6 +160,7 @@ export async function verifyRepoCitations(
           code: 'BOUND_VIOLATED',
           severity: 'error',
           targetFieldId: criterionId,
+          message: `Artifact targets commit ${claimed}, but this workspace is pinned to ${config.targetCommitSha}.`,
         },
       ],
     };
@@ -186,11 +187,12 @@ export async function verifyRepoCitations(
       'citation check: FAILED — no model call made',
       ...missing.map((m) => `  - no such file at ${config.targetCommitSha.slice(0, 8)}: ${m}`),
     ],
-    findings: missing.map(() => ({
+    findings: missing.map((m) => ({
       id: ids.generate(),
       code: 'BOUND_VIOLATED' as const,
       severity: 'error' as const,
       targetFieldId: criterionId,
+      message: `No such file at ${config.targetCommitSha.slice(0, 8)}: ${m}`,
     })),
   };
 }

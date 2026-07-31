@@ -16,10 +16,20 @@ npm run build
 Configure a provider. Either copy `.env.example` to `.env` and add a key, or — if you already use pi — just `pi login` and skip the file entirely:
 
 ```bash
-node --env-file=.env node_modules/.bin/deepdive doctor
+node --env-file=.env apps/cli/dist/bin.js doctor
 ```
 
 `doctor` makes no network call and spends nothing. It should end with `Ready.`
+
+Point `node` at `apps/cli/dist/bin.js`, not at `node_modules/.bin/deepdive` — that path is a shell wrapper, and handing it to `node` is a syntax error on Windows. The CLI runs from `dist/`, so rebuild after changing source.
+
+To type `deepdive` instead of the full path, link it once:
+
+```bash
+npm link -w apps/cli
+```
+
+The bare command then resolves on every platform, but it is not `node`, so `--env-file` is unavailable — export your key in the shell, or keep using the `node --env-file=.env apps/cli/dist/bin.js` form. The examples below are written as `deepdive` for readability; substitute whichever form you are using.
 
 Then work through a project. **Greenfield** — you design and build your own:
 

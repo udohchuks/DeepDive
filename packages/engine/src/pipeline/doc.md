@@ -20,6 +20,9 @@ const result = await orchestrator.executeReviewRound();
 
 ## Constraints & gotchas
 - Deterministic failures immediately halt the review round prior to Grader invocation.
+- **Every failing finding carries a `message` saying why.** The gate used to build findings from the criterion id alone and discard the code check's own message, so a rejection printed `BOUND_VIOLATED on charter_scope_bounded` and nothing else. That is the wrong place to be terse: the deterministic gate is the half of grading that teaches for free, and a rejection explaining nothing pushes the student toward `deepdive hint`, which costs a model call, to learn something a code check already knew. The check's message wins over the criterion description, since the description restates the rule while the message describes this submission.
+- A code check that **throws** is a bug in the rubric, not in the student's work, so its message says so — otherwise the student goes looking for the mistake in their own artifact.
+- The message is **persisted, not only printed** (migration `003`), so `history` can explain an old round. Rounds recorded before that migration read back with `message: undefined` and still render, just without the explanation; the reason was never captured for them and cannot be reconstructed.
 
 ## Tests
 Covered by `packages/engine/tests/pipeline.test.ts`.

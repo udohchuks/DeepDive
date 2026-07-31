@@ -412,6 +412,9 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
           );
           for (const finding of round.findings) {
             io.out(`       - ${finding.severity}: ${finding.code} on ${finding.targetFieldId}`);
+            // Rounds recorded before findings carried a reason have none to
+            // show; they still list, just without the explanation.
+            if (finding.message) io.out(`         ${finding.message}`);
           }
         }
         return 0;
