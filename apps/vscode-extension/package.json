@@ -11,10 +11,14 @@
     "vscode": "^1.85.0",
     "node": ">=22.19.0"
   },
-  "categories": ["Education"],
+  "categories": [
+    "Education"
+  ],
   "main": "./dist/extension.cjs",
   "types": "dist/index.d.ts",
-  "activationEvents": ["onStartupFinished"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "contributes": {
     "commands": [
       {
@@ -105,7 +109,8 @@
   "scripts": {
     "build": "tsc -b && npm run bundle",
     "bundle": "esbuild src/activation.ts --bundle --outfile=dist/extension.cjs --format=cjs --platform=node --target=node20 --external:vscode",
-    "test": "vitest run"
+    "test": "vitest run",
+    "package": "npm run build && vsce package --no-dependencies"
   },
   "dependencies": {
     "@deepdive/content": "0.1.0",
@@ -116,5 +121,10 @@
   "devDependencies": {
     "@types/vscode": "^1.85.0",
     "esbuild": "^0.23.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/udohchuks/DeepDive.git",
+    "directory": "apps/vscode-extension"
   }
 }

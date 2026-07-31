@@ -1,0 +1,13 @@
+# The extension ships as one bundled file. Everything below either builds it
+# or is already inside it, and shipping the sources as well would ship two
+# copies that can drift apart.
+src/**
+tests/**
+tsconfig.json
+tsconfig.tsbuildinfo
+dist/**/*.js
+dist/**/*.js.map
+dist/**/*.d.ts
+dist/**/*.d.ts.map
+!dist/extension.cjs
+.vscodeignore
