@@ -12,7 +12,8 @@
     "apps/*"
   ],
   "scripts": {
-    "build": "tsc -b",
+    "cli": "node --env-file=.env apps/cli/dist/bin.js",
+    "build": "tsc -b && npm run bundle --workspace apps/vscode-extension",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "lint": "eslint .",

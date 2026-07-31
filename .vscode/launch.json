@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run DeepDive Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}/apps/vscode-extension"],
+      "outFiles": ["${workspaceFolder}/apps/vscode-extension/dist/**/*.cjs"],
+      "preLaunchTask": "npm: build - apps/vscode-extension"
+    }
+  ]
+}

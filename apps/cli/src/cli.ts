@@ -26,7 +26,7 @@ import {
   buildHintProfile,
 } from './hints.js';
 import { HintLevel, QuizItem } from '@deepdive/core';
-import { renderStudio } from './studio.js';
+import { computeStats, renderStudio } from './studio.js';
 import { buildRoleModel, PiBackedKeyStore, runScaffold, runVerify } from './agent_commands.js';
 import { createTerminalApprover } from './approver.js';
 import { SessionStore } from './session_store.js';
@@ -265,17 +265,72 @@ async function confirmThirdPartyCode(
   });
 }
 
+/**
+ * Structured result of a command, for callers that are not people.
+ *
+ * The VS Code extension reads this rather than scraping the human output:
+ * the printed lines are written to be read, and are free to change wording,
+ * so parsing them would make every phrasing change a breaking change.
+ */
+export interface JsonResult {
+  command: string;
+  exitCode: number;
+  /** The human output, verbatim, so a caller can still show it if it wants. */
+  lines: string[];
+  errors: string[];
+  [key: string]: unknown;
+}
+
 /** Returns a process exit code rather than calling process.exit, so it is testable. */
 export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<number> {
   let projectDir: string;
-  let withoutProject: string[];
+  let parsed: string[];
   try {
-    ({ projectDir, rest: withoutProject } = parseProjectDir(argv));
+    ({ projectDir, rest: parsed } = parseProjectDir(argv));
   } catch (err: unknown) {
     io.err(`error: ${err instanceof Error ? err.message : String(err)}`);
     return 1;
   }
 
+  const jsonMode = parsed.includes('--json');
+  const withoutProject = parsed.filter((arg) => arg !== '--json');
+
+  // In JSON mode stdout must carry one parseable object and nothing else, so
+  // the human lines are captured rather than printed and handed back inside it.
+  const captured: string[] = [];
+  const capturedErrors: string[] = [];
+  const machine: Record<string, unknown> = {};
+  const effectiveIo: CliIo = jsonMode
+    ? { out: (line) => captured.push(line), err: (line) => capturedErrors.push(line) }
+    : io;
+
+  const exitCode = await runCommand(
+    withoutProject,
+    projectDir,
+    effectiveIo,
+    machine,
+  );
+
+  if (jsonMode) {
+    const result: JsonResult = {
+      command: withoutProject[0] ?? '',
+      exitCode,
+      lines: captured,
+      errors: capturedErrors,
+      ...machine,
+    };
+    io.out(JSON.stringify(result));
+  }
+
+  return exitCode;
+}
+
+async function runCommand(
+  withoutProject: string[],
+  projectDir: string,
+  io: CliIo,
+  machine: Record<string, unknown>,
+): Promise<number> {
   const [command, ...rest] = withoutProject;
 
   if (!command || command === 'help' || command === '--help' || command === '-h') {
@@ -321,6 +376,11 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
         const citations = await verifyRepoCitations(payload, projectDir, undefined, criterion);
         for (const line of citations.lines) io.out(line);
         if (!citations.passed) {
+          machine.rubric = rubricName;
+          machine.phaseId = CLI_RUBRICS[rubricName]!.phaseId;
+          machine.status = 'revise';
+          machine.shortCircuited = true;
+          machine.findings = citations.findings;
           recordRoundFor(projectDir, io, {
             phaseId: CLI_RUBRICS[rubricName]!.phaseId,
             status: 'revise',
@@ -354,6 +414,12 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       const result = await runGrade(rubricName, payload, provider, context);
       for (const line of result.lines) io.out(line);
 
+      machine.rubric = rubricName;
+      machine.phaseId = CLI_RUBRICS[rubricName]!.phaseId;
+      machine.status = result.verdict?.verdict ?? 'revise';
+      machine.shortCircuited = result.shortCircuited;
+      machine.findings = result.findings;
+
       // Record the submission whatever the outcome. A rejected round is the
       // part worth keeping: it is the record of what changed between attempts.
       recordRoundFor(projectDir, io, {
@@ -380,16 +446,18 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
         const hintsTaken = store
           .hintProfileSource()
           .reduce((total, entry) => total + entry.hints.length, 0);
-
-        for (const line of renderStudio({
+        const input = {
           projectDir,
           rounds,
           mastery: store.masteryStates(),
           hintsTaken,
           now: new Date(),
-        })) {
-          io.out(line);
-        }
+        };
+
+        for (const line of renderStudio(input)) io.out(line);
+
+        machine.stats = computeStats(input);
+        machine.rounds = rounds;
         return 0;
       } finally {
         store.close();
@@ -400,6 +468,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       const store = new SessionStore({ projectDir, mustExist: true });
       try {
         const rounds = store.history();
+        machine.rounds = rounds;
         if (rounds.length === 0) {
           io.out(`No rounds recorded yet for ${projectDir}.`);
           return 0;
@@ -449,12 +518,20 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
           requested,
         );
 
+        machine.targetFieldId = field;
+        machine.roundNumber = turn.roundNumber;
+        machine.phaseId = turn.phaseId;
+        machine.revealed = already.map((h) => ({ level: h.level, content: h.content }));
+
         const existing = already.find((h) => h.level === level);
         if (existing) {
           // Re-reading is free and must not re-generate: a second call at
           // temperature 0 would still cost money to say the same thing, and a
           // ladder whose rungs changed under the student would not be a ladder.
           io.out(`${level} (already revealed) — on ${field}\n\n${existing.content}`);
+          machine.level = level;
+          machine.content = existing.content;
+          machine.freshlyGenerated = false;
           return 0;
         }
 
@@ -475,6 +552,10 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
         // Logged, never gated: this records that help was taken, and nothing
         // reads it to penalise a completion.
         store.recordHint(turn.turnId, generated.level, generated.content);
+
+        machine.level = generated.level;
+        machine.content = generated.content;
+        machine.freshlyGenerated = true;
       } finally {
         store.close();
       }

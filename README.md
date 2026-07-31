@@ -165,6 +165,29 @@ citation check: FAILED — no model call made
 
 Note the asymmetry with greenfield: an onboarding workspace holds **someone else's code**, and `scaffold`/`verify` hold `bash`, so running its test suite executes that code with your file access. DeepDive has no OS sandbox right now, so it asks before doing that — once per command, and `--auto` does not answer it. Declining is the default for a non-interactive stdin.
 
+## In VS Code
+
+The extension is the same thing without the terminal. Build once, then press **F5** (*Run DeepDive Extension*):
+
+```bash
+npm run build
+```
+
+To use it in a normal window instead of the debug host, set `deepdive.cliPath` to your built `apps/cli/dist/bin.js`.
+
+What it adds over the CLI:
+
+- **Rejections appear on the line that caused them.** Grading `charter.json` puts each finding in the Problems panel, underlining the field its message names. This is the one thing the editor does that a terminal cannot.
+- **A sidebar** with the phase track, the studio's consistency numbers, and round history — each round expanding into its findings.
+- **The current phase in the status bar**, with the streak beside it when one is live.
+- **The hint ladder as a panel**, every revealed rung on screen, with a *Reveal next* button that disappears at L4 because there is nothing above it to ask for.
+
+Commands: `DeepDive: Grade this artifact`, `Show hint`, `Show studio`, `Refresh`, `Check configuration`.
+
+`scaffold` and `verify` are deliberately **not** commands here. They hold tools and write files, and what protects you is being asked before each mutating command. Behind a one-click button that becomes a reflex rather than a decision, so they stay at the command line. A test asserts the manifest declares no such command, so adding one has to be deliberate.
+
+The extension runs the CLI as a subprocess and reads `--json` rather than importing the packages. Partly because SQLite is a native module built against Node's ABI rather than the Electron ABI the extension host runs, and partly because one implementation of "what does grading a charter mean" is easier to keep honest than two.
+
 ## Monorepo Layout
 
 ```
@@ -190,7 +213,7 @@ DeepDive/
 │   └── onboarding/             # Onboarding phase controllers (OB-A–OB-G)
 └── apps/
     ├── cli/                    # `deepdive` command-line entry point
-    └── vscode-extension/       # VS Code extension UI & webview panels
+    └── vscode-extension/       # VS Code extension: diagnostics, sidebar, hint panel
 ```
 
 ## Verification & Commands
@@ -214,6 +237,8 @@ Codebase Onboarding is runnable from the CLI: `onboard` clones and pins, and `gr
 
 All seven onboarding phases OB-A through OB-G are reachable from the CLI, and the leveled hint ladder is wired to both modes with reveals rolling into the completion record's hint profile.
 
-Not yet wired: the VS Code extension is not a loadable extension. The `Concept` schema (prerequisites, categories) is unused — concept ids come from whatever the quiz generator labels a question with, so there is no prerequisite graph ordering what gets tested. Quiz items other than multiple choice (`structured_trace`, `invariant_explanation`) are storable but never drawn, since scoring them would need a model and the quiz would stop being deterministic.
+The VS Code extension is loadable and wired to the CLI: grade, diagnostics, sidebar, status bar and the hint panel all work against a real project.
+
+Not yet wired: the `Concept` schema (prerequisites, categories) is unused — concept ids come from whatever the quiz generator labels a question with, so there is no prerequisite graph ordering what gets tested. Quiz items other than multiple choice (`structured_trace`, `invariant_explanation`) are storable but never drawn, since scoring them would need a model and the quiz would stop being deterministic.
 
 Licensed MIT. Packages declare `files`, pinned `engines` and public `publishConfig`, and `npm pack` includes the migration SQL the built runner resolves at run time, so `npm publish --workspaces` is unblocked.

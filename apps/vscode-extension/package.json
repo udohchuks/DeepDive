@@ -1,19 +1,120 @@
 {
-  "name": "@deepdive/vscode-extension",
+  "name": "deepdive",
+  "displayName": "DeepDive",
+  "description": "Guided project learning: grade your own design work against rubrics, in the editor.",
   "private": true,
+  "publisher": "deepdive",
   "version": "0.1.0",
   "type": "module",
   "license": "MIT",
-  "main": "dist/index.js",
+  "engines": {
+    "vscode": "^1.85.0",
+    "node": ">=22.19.0"
+  },
+  "categories": ["Education"],
+  "main": "./dist/extension.cjs",
   "types": "dist/index.d.ts",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "commands": [
+      {
+        "command": "deepdive.grade",
+        "title": "Grade this artifact",
+        "category": "DeepDive",
+        "icon": "$(check)"
+      },
+      {
+        "command": "deepdive.hint",
+        "title": "Show hint",
+        "category": "DeepDive",
+        "icon": "$(lightbulb)"
+      },
+      {
+        "command": "deepdive.studio",
+        "title": "Show studio",
+        "category": "DeepDive",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "deepdive.refresh",
+        "title": "Refresh",
+        "category": "DeepDive",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "deepdive.doctor",
+        "title": "Check configuration",
+        "category": "DeepDive",
+        "icon": "$(pass)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "deepdive",
+          "title": "DeepDive",
+          "icon": "$(mortar-board)"
+        }
+      ]
+    },
+    "views": {
+      "deepdive": [
+        {
+          "id": "deepdive.progress",
+          "name": "Progress"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "deepdive.refresh",
+          "when": "view == deepdive.progress",
+          "group": "navigation"
+        },
+        {
+          "command": "deepdive.studio",
+          "when": "view == deepdive.progress",
+          "group": "navigation"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "deepdive.grade",
+          "when": "resourceExtname == .json",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "DeepDive",
+      "properties": {
+        "deepdive.cliPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to the DeepDive CLI. A `.js` path is run with the extension host's Node; anything else is executed directly. Leave empty to use `deepdive` from your PATH."
+        },
+        "deepdive.projectDir": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Project whose history to read. Leave empty to use the open workspace folder — history lives beside the project, in `.deepdive/`."
+        }
+      }
+    }
+  },
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b && npm run bundle",
+    "bundle": "esbuild src/activation.ts --bundle --outfile=dist/extension.cjs --format=cjs --platform=node --target=node20 --external:vscode",
     "test": "vitest run"
   },
   "dependencies": {
+    "@deepdive/content": "0.1.0",
     "@deepdive/core": "0.1.0",
-    "@deepdive/storage": "0.1.0",
     "@deepdive/engine": "0.1.0",
-    "@deepdive/content": "0.1.0"
+    "@deepdive/storage": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.23.1"
   }
 }
