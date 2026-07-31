@@ -1,6 +1,7 @@
 import { createModelProvider } from '@deepdive/provider';
 import { assertWorkspace, loadArtifact } from './artifact_input.js';
 import { buildDoctorReport } from './doctor.js';
+import { envFileCandidates, loadEnvFiles } from './env_file.js';
 import { CITATION_CRITERION, CLI_RUBRICS, ONBOARDING_RUBRICS, runGrade } from './grade.js';
 import { readOnboardingConfig, runOnboard, verifyRepoCitations } from './onboarding_commands.js';
 import {
@@ -93,10 +94,9 @@ Permission modes:
   In an onboarding workspace, running the cloned repository's test suite is
   confirmed separately and --auto does not answer it.
 
-Configuration is read from the environment. Load a .env file with Node's own
-loader, which keeps the key out of your shell history:
-
-  node --env-file=.env node_modules/.bin/deepdive doctor
+Configuration is read from the environment. A .env beside your project, or in
+the directory you run from, is loaded automatically — anything already set in
+your environment wins over it. Run "deepdive doctor" to see which file was read.
 `;
 
 /**
@@ -292,6 +292,10 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
     return 1;
   }
 
+  // Before anything reads a key. A variable already in the environment wins,
+  // so this fills gaps rather than overriding how the shell was configured.
+  const envFilesLoaded = loadEnvFiles(envFileCandidates(projectDir, process.cwd()));
+
   const jsonMode = parsed.includes('--json');
   const withoutProject = parsed.filter((arg) => arg !== '--json');
 
@@ -309,6 +313,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
     projectDir,
     effectiveIo,
     machine,
+    envFilesLoaded,
   );
 
   if (jsonMode) {
@@ -330,6 +335,7 @@ async function runCommand(
   projectDir: string,
   io: CliIo,
   machine: Record<string, unknown>,
+  envFilesLoaded: readonly string[],
 ): Promise<number> {
   const [command, ...rest] = withoutProject;
 
@@ -340,7 +346,7 @@ async function runCommand(
 
   try {
     if (command === 'doctor') {
-      const report = buildDoctorReport();
+      const report = buildDoctorReport(process.env, envFilesLoaded);
       for (const line of report.lines) io.out(line);
       io.out(report.ok ? '\nReady.' : '\nNot ready — see above.');
       return report.ok ? 0 : 1;

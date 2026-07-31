@@ -4,6 +4,8 @@ DeepDive is a local-only platform that helps developers design, understand, and 
 
 The AI scaffolds tests, verifies work, and grades against rubrics. It never writes the design documents or the implementation the learner is graded on.
 
+**New here? [GETTING-STARTED.md](GETTING-STARTED.md) is one copy-pasteable path from `npm install` to a graded submission**, with real output at every step. The rest of this file is reference.
+
 ## Quickstart
 
 Requires Node **22.19.0** (see `.nvmrc`).
@@ -16,10 +18,12 @@ npm run build
 Configure a provider. Either copy `.env.example` to `.env` and add a key, or — if you already use pi — just `pi login` and skip the file entirely:
 
 ```bash
-node --env-file=.env apps/cli/dist/bin.js doctor
+node apps/cli/dist/bin.js doctor
 ```
 
-`doctor` makes no network call and spends nothing. It should end with `Ready.`
+`doctor` makes no network call and spends nothing. It should end with `Ready.`, and its `env file` line names the file your key was read from.
+
+A `.env` at or above your project is loaded automatically, the same way `.gitignore` and `.npmrc` are found, so a key at the top of a checkout covers every project inside it. Anything already set in your environment wins over the file — a file on disk must not be able to silently redirect a command to a different provider than your shell was configured with.
 
 Point `node` at `apps/cli/dist/bin.js`, not at `node_modules/.bin/deepdive` — that path is a shell wrapper, and handing it to `node` is a syntax error on Windows. The CLI runs from `dist/`, so rebuild after changing source.
 
@@ -29,7 +33,7 @@ To type `deepdive` instead of the full path, link it once:
 npm link -w apps/cli
 ```
 
-The bare command then resolves on every platform, but it is not `node`, so `--env-file` is unavailable — export your key in the shell, or keep using the `node --env-file=.env apps/cli/dist/bin.js` form. The examples below are written as `deepdive` for readability; substitute whichever form you are using.
+The examples below are written as `deepdive` for readability; substitute whichever form you are using.
 
 Then work through a project. **Greenfield** — you design and build your own:
 

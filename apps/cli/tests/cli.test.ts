@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { ModelProvider, ModelRequestOptions } from '@deepdive/core';
 import { runCli, CliIo, parsePermissionMode } from '../src/cli.js';
@@ -24,6 +24,24 @@ class SpyProvider implements ModelProvider {
 }
 
 describe('deepdive CLI', () => {
+  // `runCli` loads a `.env` into the real environment, which is the point of
+  // it — but this repository has one, so a test that runs a command would
+  // otherwise leave DEEPSEEK_MODEL and friends set for every test after it,
+  // and assertions about pinned defaults would quietly measure the developer's
+  // own configuration instead.
+  let envBefore: NodeJS.ProcessEnv;
+
+  beforeEach(() => {
+    envBefore = { ...process.env };
+  });
+
+  afterEach(() => {
+    for (const key of Object.keys(process.env)) {
+      if (!(key in envBefore)) delete process.env[key];
+    }
+    Object.assign(process.env, envBefore);
+  });
+
   it('prints usage and exits non-zero when given no command', async () => {
     const io = captureIo();
     expect(await runCli([], io)).toBe(1);

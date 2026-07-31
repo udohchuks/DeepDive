@@ -16,9 +16,18 @@ export interface DoctorReport {
  * two possible sources, "found" alone is not enough to explain a surprising
  * result. The credential itself is never printed.
  */
-export function buildDoctorReport(env: NodeJS.ProcessEnv = process.env): DoctorReport {
+export function buildDoctorReport(
+  env: NodeJS.ProcessEnv = process.env,
+  envFilesLoaded: readonly string[] = [],
+): DoctorReport {
   const lines: string[] = [];
   let ok = true;
+
+  // Which `.env` was read is the first thing worth knowing when a key is not
+  // where you thought it was — "MISSING" says nothing about where it looked.
+  lines.push(
+    `env file     : ${envFilesLoaded.length > 0 ? envFilesLoaded.join(', ') : 'none found'}`,
+  );
 
   const mode = env.DEEPDIVE_PERMISSION_MODE ?? 'approve';
   lines.push(`permissions  : ${mode}${env.DEEPDIVE_PERMISSION_MODE ? '' : ' (default)'}`);
