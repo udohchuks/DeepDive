@@ -10,7 +10,7 @@
   - `@deepdive/agent`: Role session definitions, permission hooks, and quarantine filters.
   - `@deepdive/vcs`: Git version control system adapters.
   - `@deepdive/content`: Rubric definitions, prompt templates, and hint level rules.
-  - `@deepdive/engine`: Submission pipeline orchestrator, test runners, and deterministic gate.
+  - `@deepdive/engine`: Deterministic gate, test runners, and clarifying-question handling. Grading itself lives in `apps/cli` (`runGrade`).
   - `@deepdive/greenfield`: Greenfield project gating engine and driver loop.
   - `@deepdive/onboarding`: Legacy/onboarding gating engine (deprecated).
   - `@deepdive/vscode-extension`: VS Code Extension host and webview message bridge.

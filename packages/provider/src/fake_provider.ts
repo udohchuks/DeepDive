@@ -10,6 +10,61 @@ export class FixtureCacheMissError extends Error {
   }
 }
 
+/**
+ * A provider that fails if it is called at all.
+ *
+ * D-1 and P-5 both say a model must not be reached on certain paths, and that
+ * was previously asserted against a counter the code under test incremented
+ * itself — a test of a convention rather than of the boundary. Injecting a
+ * provider that throws moves the assertion onto the thing that actually
+ * matters: whether a call would have left the process.
+ */
+export class NeverCalledProvider implements ModelProvider {
+  constructor(private context = 'this path') {}
+
+  async generateStructured<T>(): Promise<T> {
+    throw new UnexpectedModelCallError(this.context);
+  }
+}
+
+export class UnexpectedModelCallError extends Error {
+  constructor(context: string) {
+    super(`A model call was made from ${context}, which must reach no model.`);
+    this.name = 'UnexpectedModelCallError';
+  }
+}
+
+/**
+ * Returns a scripted response and records what it was asked.
+ *
+ * The recorded requests are the point: a test can assert not only that a call
+ * happened but that the prompt carried the artifact and the criteria, which is
+ * what distinguishes a real grading call from one that was made with nothing
+ * in it.
+ */
+export class ScriptedProvider implements ModelProvider {
+  public readonly requests: ModelRequestOptions<unknown>[] = [];
+
+  constructor(private responses: unknown[]) {}
+
+  get callCount(): number {
+    return this.requests.length;
+  }
+
+  async generateStructured<T>(options: ModelRequestOptions<T>): Promise<T> {
+    this.requests.push(options as ModelRequestOptions<unknown>);
+    if (this.responses.length === 0) {
+      throw new Error(
+        `ScriptedProvider ran out of responses on call ${this.requests.length}. Script one per expected call.`,
+      );
+    }
+    // Parsed with the caller's schema rather than cast, so a scripted response
+    // that could not have come from a real grader fails in the test that wrote
+    // it instead of passing through as a plausible verdict.
+    return options.schema.parse(this.responses.shift());
+  }
+}
+
 export class RecordedFixtureProvider implements ModelProvider {
   private fixtures = new Map<string, unknown>();
 

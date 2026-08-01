@@ -13,9 +13,9 @@ import {
   validateAndVerifyPhaseObBArtifact,
   OnboardingDriver,
 } from '@deepdive/onboarding';
-import { SubmissionOrchestrator } from '@deepdive/engine';
-import { RsddRubric } from '@deepdive/content';
-import { FixedClock, FixedIdGenerator, FakeVcs } from '@deepdive/core';
+import { NeverCalledProvider, ScriptedProvider } from '@deepdive/provider';
+import { FixedClock, FakeVcs } from '@deepdive/core';
+import { runGrade } from '../../apps/cli/src/grade.js';
 
 describe('Onboarding End-to-End Integration Suite (Phase 9.2)', () => {
   const tmpWorkspacePath = path.join(process.cwd(), 'tests/integration/tmp_onboarding_workspace');
@@ -44,7 +44,6 @@ describe('Onboarding End-to-End Integration Suite (Phase 9.2)', () => {
 
   it('runs complete Onboarding project flow from Phase OB-A to Phase OB-G (Complete)', async () => {
     const clock = new FixedClock();
-    const idGen = new FixedIdGenerator('123e4567-e89b-12d3-a456');
 
     // 1. Workspace Initialization & Commit SHA Pinning
     const config = await initializeOnboardingWorkspace(
@@ -102,18 +101,40 @@ describe('Onboarding End-to-End Integration Suite (Phase 9.2)', () => {
     const verifyRes = await validateAndVerifyPhaseObBArtifact(rsddPayload, tmpWorkspacePath, vcs);
     expect(verifyRes.citationsValid).toBe(true);
 
-    const orchestratorB = new SubmissionOrchestrator({
+    // Graded through the same function `deepdive grade rsdd` calls.
+    const graderB = new ScriptedProvider([
+      {
+        verdict: 'approved',
+        criterionFindings: [
+          { criterionId: 'rsdd_design_accuracy', met: true, comment: 'Matches the cited code.' },
+        ],
+      },
+    ]);
+
+    const resB = await runGrade('rsdd', rsddPayload, graderB);
+    expect(resB.shortCircuited).toBe(false);
+    expect(resB.verdict?.verdict).toBe('approved');
+    expect(graderB.callCount).toBe(1);
+
+    roundRepo.addRound({
+      id: '123e4567-e89b-12d3-a456-000000000010',
       projectId: config.projectId,
       phaseId: state.currentPhase,
-      rubric: RsddRubric,
-      artifactPayload: rsddPayload,
-      roundRepository: roundRepo,
-      clock,
-      idGenerator: idGen,
+      roundNumber: 1,
+      submittedAt: clock.isoString(),
+      status: 'approved',
     });
 
-    const resB = await orchestratorB.executeReviewRound();
-    expect(resB.exitState).toBe('approved');
+    // An RSDD declaring an invalid level is stopped by a code check, before any
+    // model is reached — the same D-1 short-circuit, asserted here against a
+    // provider that throws rather than against a counter.
+    const resInvalid = await runGrade(
+      'rsdd',
+      { ...rsddPayload, level: 'L9' },
+      new NeverCalledProvider('an RSDD that failed the deterministic gate'),
+    );
+    expect(resInvalid.shortCircuited).toBe(true);
+    expect(resInvalid.findings.some((f) => f.targetFieldId === 'rsdd_level_valid')).toBe(true);
 
     const transB = driver.processSubmissionVerdict(state, true);
     expect(transB.transitionOccurred).toBe(true);

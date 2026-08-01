@@ -92,4 +92,66 @@ describe('Migration path resolution (regression)', () => {
     const dir = resolveMigrationsDir();
     expect(fs.readdirSync(dir).some((f) => f.endsWith('.sql'))).toBe(true);
   });
+
+  it('reads a migration version from its filename, not from its sort position', () => {
+    // The version used to be the file's index in sorted order, so inserting a
+    // migration that sorts earlier renumbered every later one — an applied file
+    // was then compared against a different file's checksum and a correct
+    // database failed to open. Adding 000_ must not disturb 001_.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'deepdive-mig-'));
+    const dbPath = path.join(dir, 'test.db');
+    try {
+      fs.writeFileSync(path.join(dir, '001_first.sql'), 'CREATE TABLE first (id TEXT);');
+
+      const first = new Database(dbPath);
+      runMigrations(first, dir);
+      expect(
+        (first.prepare('SELECT version, filename FROM _migrations').all() as { version: number }[])[0]?.version,
+      ).toBe(1);
+      first.close();
+
+      // A new migration that sorts before the applied one.
+      fs.writeFileSync(path.join(dir, '000_zeroth.sql'), 'CREATE TABLE zeroth (id TEXT);');
+
+      const second = new Database(dbPath);
+      expect(() => runMigrations(second, dir)).not.toThrow();
+      const applied = second
+        .prepare('SELECT version, filename FROM _migrations ORDER BY version')
+        .all() as { version: number; filename: string }[];
+      expect(applied.map((r) => [r.version, r.filename])).toEqual([
+        [0, '000_zeroth.sql'],
+        [1, '001_first.sql'],
+      ]);
+      second.close();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses a migration with no version in its filename', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'deepdive-mig-'));
+    try {
+      fs.writeFileSync(path.join(dir, 'add_column.sql'), 'CREATE TABLE x (id TEXT);');
+      const db = new Database(':memory:');
+      expect(() => runMigrations(db, dir)).toThrow(/does not start with a numeric version/);
+      db.close();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses two migrations claiming the same version', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'deepdive-mig-'));
+    try {
+      fs.writeFileSync(path.join(dir, '001_a.sql'), 'CREATE TABLE a (id TEXT);');
+      fs.writeFileSync(path.join(dir, '001_b.sql'), 'CREATE TABLE b (id TEXT);');
+      const db = new Database(':memory:');
+      // Silently applying one and skipping the other forever is the failure
+      // this replaces.
+      expect(() => runMigrations(db, dir)).toThrow(/claimed by both/);
+      db.close();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

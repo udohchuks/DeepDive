@@ -19,7 +19,7 @@ Paths are repo-relative so they resolve for every reader and on GitHub. (They we
 | `@deepdive/vcs` | 1.2 | Version control port abstraction (`GitVcs`, `FakeVcs`) | [packages/vcs/src/doc.md](../packages/vcs/src/doc.md) |
 | `@deepdive/content` | 4.1 | Rubric instances, role prompts, L1-L4 rules, struggle rules, golden snapshots | [packages/content/src/doc.md](../packages/content/src/doc.md) |
 | `@deepdive/engine` (runner) | 5.1 | Local test runner integration (`vitest`, `jest`, `cargo`, `pytest`) & P-5 invariant | [packages/engine/src/runner/doc.md](../packages/engine/src/runner/doc.md) |
-| `@deepdive/engine` (pipeline) | 5.2 | Submission pipeline orchestrator, D-1 deterministic short-circuit gate & SQLite saving | [packages/engine/src/pipeline/doc.md](../packages/engine/src/pipeline/doc.md) |
+| `@deepdive/engine` (pipeline) | 5.2 | D-1 deterministic short-circuit gate & clarifying-question handling | [packages/engine/src/pipeline/doc.md](../packages/engine/src/pipeline/doc.md) |
 | `@deepdive/greenfield` | 6.1, 6.2, 6.3 | Greenfield workspace initialization, phase A-F validation, gating & unbounded rounds | [packages/greenfield/src/doc.md](../packages/greenfield/src/doc.md) |
 | `@deepdive/onboarding` | 7.1, 7.2, 7.3 | Onboarding workspace init, commit SHA pinning, RSDD citation verification, gating OB-A-G | [packages/onboarding/src/doc.md](../packages/onboarding/src/doc.md) |
 | `@deepdive/vscode-extension` | 8.1, 8.2 | VS Code extension host, webview postMessage bridge, L1-L4 hint panel & struggle modal | [apps/vscode-extension/src/doc.md](../apps/vscode-extension/src/doc.md) |

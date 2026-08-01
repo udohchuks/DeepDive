@@ -10,6 +10,7 @@ import {
   GraderPrompt,
 } from '@deepdive/content';
 import { evaluateDeterministicGate } from '@deepdive/engine';
+import { filterAndSanitizeFindings } from '@deepdive/agent';
 
 /** Rubrics reachable from the CLI, keyed by the name a student would type. */
 export const CLI_RUBRICS: Record<string, RubricDefinition> = {
@@ -136,17 +137,37 @@ export async function runGrade(
   // hint ladder attaches to the field the Grader flagged (§8b), and a round
   // that stored nothing to point at could never be the subject of a hint.
   const ids = new CryptoIdGenerator();
-  const unmet: Finding[] = verdict.criterionFindings
-    .filter((c) => !c.met)
-    .map((c) => ({
-      id: ids.generate(),
-      code: 'BOUND_VIOLATED',
-      severity: 'error',
-      targetFieldId: c.criterionId,
-      // The Grader's comment was printed and then thrown away, so `history`
-      // could show that an old round was rejected but never why.
-      message: c.comment,
-    }));
+
+  // Findings built from model output cross the quarantine boundary before they
+  // are stored or rendered. Zod validated the verdict's *shape*; the comment
+  // inside it is still free text a model wrote, and it goes on to a terminal,
+  // a webview and the round history. This is the step that bounds it.
+  // Only criteria the Grader was actually shown. A verdict naming a criterion
+  // that is not in this rubric is a hallucination, and storing it would attach
+  // a rejection to a rule the student was never judged against — and the hint
+  // ladder would then offer help on a field that does not exist. Dropping it
+  // beats letting the schema reject it downstream, which would throw away the
+  // whole round over one bad entry.
+  const judgedIds = new Set(judged.map((c) => c.id));
+  for (const c of verdict.criterionFindings) {
+    if (!judgedIds.has(c.criterionId)) {
+      lines.push(`  (ignored: verdict named unknown criterion "${c.criterionId}")`);
+    }
+  }
+
+  const unmet: Finding[] = filterAndSanitizeFindings(
+    verdict.criterionFindings
+      .filter((c) => !c.met && judgedIds.has(c.criterionId))
+      .map((c) => ({
+        id: ids.generate(),
+        code: 'BOUND_VIOLATED',
+        severity: 'error',
+        targetFieldId: c.criterionId,
+        // The Grader's comment was printed and then thrown away, so `history`
+        // could show that an old round was rejected but never why.
+        message: c.comment,
+      })),
+  );
 
   return { lines, shortCircuited: false, verdict, findings: unmet };
 }

@@ -13,6 +13,23 @@ export interface PathPolicy {
   blockedPaths: string[];
 }
 
+/**
+ * Whether `child` is `parent` itself or lives underneath it.
+ *
+ * Both sides are resolved first, so a relative path is answered against the
+ * current directory rather than compared as text. Substring matching — the
+ * obvious shortcut — is wrong in both directions: `/repo/graded-old` contains
+ * `/repo/graded` without being inside it, and a relative `charter.json` does
+ * not contain the absolute graded path even when it resolves into it.
+ */
+export function isPathWithin(parent: string, child: string): boolean {
+  const from = path.resolve(parent);
+  const to = path.resolve(child);
+  if (from === to) return true;
+  const relative = path.relative(from, to);
+  return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
 export class PathPolicyEvaluator {
   constructor(private policy: PathPolicy) {}
 

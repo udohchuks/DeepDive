@@ -39,6 +39,40 @@ export class MigrationChecksumMismatchError extends Error {
   }
 }
 
+export class UnversionedMigrationError extends Error {
+  constructor(filename: string) {
+    super(
+      `Migration "${filename}" does not start with a numeric version (e.g. 004_add_column.sql). Versions are read from the filename, not from sort position.`,
+    );
+    this.name = 'UnversionedMigrationError';
+  }
+}
+
+export class DuplicateMigrationVersionError extends Error {
+  constructor(version: number, first: string, second: string) {
+    super(`Migration version ${version} is claimed by both "${first}" and "${second}".`);
+    this.name = 'DuplicateMigrationVersionError';
+  }
+}
+
+/**
+ * Reads a migration's version from its filename prefix.
+ *
+ * The version used to be the file's index in sorted order, which made the
+ * `001_`/`002_` prefixes decorative. Adding a migration that sorts before an
+ * existing one — or renaming one — renumbered every migration after it, so an
+ * already-applied file was compared against a different file's checksum and a
+ * correct database failed to open with a mismatch. Reading the number the
+ * author wrote means a file's identity does not depend on its neighbours.
+ */
+export function parseMigrationVersion(filename: string): number {
+  const match = /^(\d+)/.exec(filename);
+  if (!match) {
+    throw new UnversionedMigrationError(filename);
+  }
+  return Number.parseInt(match[1], 10);
+}
+
 export function runMigrations(db: Database.Database, migrationsDir?: string): void {
   // Ensure _migrations tracking table exists
   db.exec(`
@@ -62,6 +96,20 @@ export function runMigrations(db: Database.Database, migrationsDir?: string): vo
     .filter((f) => f.endsWith('.sql'))
     .sort();
 
+  const versioned = files.map((filename) => ({ filename, version: parseMigrationVersion(filename) }));
+
+  // A repeated version would make the applied-set ambiguous: one of the two
+  // files would be recorded and the other silently skipped forever.
+  const seen = new Map<number, string>();
+  for (const { filename, version } of versioned) {
+    const clash = seen.get(version);
+    if (clash) {
+      throw new DuplicateMigrationVersionError(version, clash, filename);
+    }
+    seen.set(version, filename);
+  }
+  versioned.sort((a, b) => a.version - b.version);
+
   const appliedRows = db.prepare('SELECT version, filename, checksum FROM _migrations ORDER BY version ASC').all() as {
     version: number;
     filename: string;
@@ -73,9 +121,7 @@ export function runMigrations(db: Database.Database, migrationsDir?: string): vo
     appliedMap.set(row.version, row);
   }
 
-  for (let i = 0; i < files.length; i++) {
-    const filename = files[i];
-    const version = i + 1;
+  for (const { filename, version } of versioned) {
     const filePath = path.join(dir, filename);
     const sqlContent = fs.readFileSync(filePath, 'utf-8');
     const checksum = crypto.createHash('sha256').update(sqlContent).digest('hex');

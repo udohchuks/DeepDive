@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import path from 'path';
 import { createPermissionHook } from '../src/index.js';
 import { PathPolicyEvaluator } from '@deepdive/policy';
 
@@ -40,6 +41,26 @@ describe('tool_call Permission Hook (Phase 3.1)', () => {
 
     const blockedCdd = await hook({ toolName: 'write', args: { path: 'cdd.json' }, role: 'scaffolder' });
     expect(blockedCdd.block).toBe(true);
+  });
+
+  it('PROTECTED INVARIANT P-2: graded-artifact matching is by path, not by substring', async () => {
+    const hook = createPermissionHook({
+      role: 'scaffolder',
+      gradedArtifactPaths: ['sdd.json', path.resolve('/repo/graded')],
+    });
+    const write = (p: string) => hook({ toolName: 'write', args: { path: p }, role: 'scaffolder' });
+
+    // A bare filename means "the graded artifact, wherever it is kept".
+    expect((await write('deep/nested/sdd.json')).block).toBe(true);
+    expect((await write('SDD.JSON')).block).toBe(true);
+    // ...and must not match a file that merely contains the name.
+    expect((await write('my_sdd.json.bak')).block).toBe(false);
+
+    // A path entry means a location, matched by containment.
+    expect((await write(path.resolve('/repo/graded/charter.json'))).block).toBe(true);
+    // The case the old substring check got wrong: a sibling sharing a prefix
+    // was treated as being inside the graded directory.
+    expect((await write(path.resolve('/repo/graded-old/charter.json'))).block).toBe(false);
   });
 
   it('fails closed on evaluator error', async () => {

