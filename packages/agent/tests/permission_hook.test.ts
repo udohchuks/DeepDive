@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import path from 'path';
+import os from 'os';
 import { createPermissionHook } from '../src/index.js';
 import { PathPolicyEvaluator } from '@deepdive/policy';
 
@@ -75,4 +76,95 @@ describe('tool_call Permission Hook (Phase 3.1)', () => {
     expect(check.block).toBe(true);
     expect(check.reason).toContain('evaluator error');
   });
+
+  it('PROTECTED INVARIANT P-2: Scaffolder cannot write a graded artifact through bash', async () => {
+    // Observed live: the write tool was blocked, and the model created the
+    // file through bash instead — past both the artifact check and the path
+    // policy, which only inspect write/edit arguments. Bash must be gated too.
+    const hook = createPermissionHook({
+      role: 'scaffolder',
+      gradedArtifactPaths: ['sdd.json'],
+      workspaceRoot: path.resolve('/workspace/project'),
+    });
+
+    const redirect = await hook({
+      toolName: 'bash',
+      args: { command: 'echo \'{"goal":"x"}\' > sdd.json' },
+      role: 'scaffolder',
+    });
+    expect(redirect.block).toBe(true);
+    expect(redirect.reason).toContain('write and edit tools');
+
+    const remove = await hook({ toolName: 'bash', args: { command: 'rm sdd.json' }, role: 'scaffolder' });
+    expect(remove.block).toBe(true);
+    expect(remove.reason).toContain('P-2');
+
+    const viaNode = await hook({
+      toolName: 'bash',
+      args: { command: "node -e \"require('fs').writeFileSync('sdd.json','{}')\"" },
+      role: 'scaffolder',
+    });
+    expect(viaNode.block).toBe(true);
+    expect(viaNode.reason).toContain('P-2');
+  });
+
+  it('allows ordinary Scaffolder bash commands inside the workspace', async () => {
+    const hook = createPermissionHook({
+      role: 'scaffolder',
+      gradedArtifactPaths: ['sdd.json'],
+      workspaceRoot: path.resolve('/workspace/project'),
+    });
+
+    const install = await hook({ toolName: 'bash', args: { command: 'npm install' }, role: 'scaffolder' });
+    expect(install.block).toBe(false);
+
+    const tests = await hook({ toolName: 'bash', args: { command: 'mkdir tests' }, role: 'scaffolder' });
+    expect(tests.block).toBe(false);
+  });
+
+  it('blocks Scaffolder bash commands that escape the workspace', async () => {
+    const hook = createPermissionHook({
+      role: 'scaffolder',
+      gradedArtifactPaths: ['sdd.json'],
+      workspaceRoot: path.resolve('/workspace/project'),
+    });
+
+    const outside = await hook({
+      toolName: 'bash',
+      args: { command: `cp x.txt ${path.resolve('/elsewhere')}/x.txt` },
+      role: 'scaffolder',
+    });
+    expect(outside.block).toBe(true);
+    expect(outside.reason).toContain('workspace boundary');
+  });
+
+  it('fails closed on Scaffolder bash when no workspace root is configured', async () => {
+    const hook = createPermissionHook({ role: 'scaffolder', gradedArtifactPaths: ['sdd.json'] });
+    const check = await hook({ toolName: 'bash', args: { command: 'npm install' }, role: 'scaffolder' });
+    expect(check.block).toBe(true);
+    expect(check.reason).toContain('no workspace root');
+  });
+
+  it.runIf(process.platform === 'win32')(
+    'write tool accepts POSIX-form absolute paths that land inside the workspace',
+    async () => {
+      // Git Bash maps /tmp to the user's temp directory; a policy rooted there
+      // must recognize the POSIX spelling of its own files instead of pushing
+      // the model toward the bash workaround.
+      const root = path.join(os.tmpdir(), 'dd-policy-ws');
+      const evaluator = new PathPolicyEvaluator({
+        readOnlyPaths: [],
+        readWritePaths: [root],
+        blockedPaths: [],
+      });
+      const hook = createPermissionHook({ role: 'scaffolder', pathEvaluator: evaluator });
+
+      const check = await hook({
+        toolName: 'write',
+        args: { path: '/tmp/dd-policy-ws/notes.md' },
+        role: 'scaffolder',
+      });
+      expect(check.block).toBe(false);
+    },
+  );
 });

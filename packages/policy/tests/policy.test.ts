@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import path from 'path';
-import { PathPolicyEvaluator, classifyCommand, isPathWithin } from '../src/index.js';
+import {
+  PathPolicyEvaluator,
+  checkScaffolderCommand,
+  classifyCommand,
+  isPathWithin,
+  normalizePosixPathForWindows,
+} from '../src/index.js';
 
 describe('Sandbox Policy Evaluator (Phase 2.2)', () => {
   const rootDir = process.cwd();
@@ -87,5 +93,101 @@ describe('Sandbox Policy Evaluator (Phase 2.2)', () => {
     // The case a substring check gets wrong: a sibling sharing a prefix.
     expect(isPathWithin(base, path.resolve('/repo/graded-old/charter.json'))).toBe(false);
     expect(isPathWithin(base, path.resolve('/repo/other'))).toBe(false);
+  });
+});
+
+describe('normalizePosixPathForWindows', () => {
+  it('leaves paths untouched on non-win32 platforms', () => {
+    expect(normalizePosixPathForWindows('/tmp/x/y.txt', { platform: 'linux' })).toBe('/tmp/x/y.txt');
+    expect(normalizePosixPathForWindows('/c/Users/x', { platform: 'darwin' })).toBe('/c/Users/x');
+  });
+
+  it('maps /tmp and /var/tmp to the temp directory on win32', () => {
+    const tmp = 'D:\\TEMP';
+    expect(normalizePosixPathForWindows('/tmp/dd/ws/hello.txt', { platform: 'win32', tmpDir: tmp })).toBe(
+      'D:\\TEMP\\dd\\ws\\hello.txt',
+    );
+    expect(normalizePosixPathForWindows('/var/tmp/x', { platform: 'win32', tmpDir: tmp })).toBe('D:\\TEMP\\x');
+  });
+
+  it('maps Git Bash drive-form paths to drive letters', () => {
+    expect(normalizePosixPathForWindows('/c/Users/x/y', { platform: 'win32' })).toBe('C:\\Users\\x\\y');
+  });
+
+  it('leaves relative and already-Windows paths alone', () => {
+    expect(normalizePosixPathForWindows('src/main.ts', { platform: 'win32' })).toBe('src/main.ts');
+    expect(normalizePosixPathForWindows('C:/Users/x', { platform: 'win32' })).toBe('C:/Users/x');
+    expect(normalizePosixPathForWindows('', { platform: 'win32' })).toBe('');
+  });
+});
+
+describe('checkScaffolderCommand', () => {
+  const root = path.resolve('/workspace/project');
+  const options = {
+    workspaceRoot: root,
+    gradedArtifacts: ['sdd.json', 'rsdd.json', 'cdd.json'],
+  };
+
+  it('allows ordinary build, test, and read commands', () => {
+    for (const command of [
+      'npm install',
+      'npm install && npm test',
+      'mkdir tests',
+      'vitest run',
+      'cat sdd.json',
+      'npx tsc --outDir dist',
+      'cat notes.md | grep todo',
+    ]) {
+      const check = checkScaffolderCommand(command, options);
+      expect(check.allowed, `should allow: ${command} (${check.reason})`).toBe(true);
+    }
+  });
+
+  it('blocks shell redirection, pointing at the checked write tools', () => {
+    // The exact shape a model reaches for when the write tool refuses: create
+    // the file through the shell, where no path argument is ever checked.
+    const check = checkScaffolderCommand("echo '{\"goal\":\"x\"}' > sdd.json", options);
+    expect(check.allowed).toBe(false);
+    expect(check.reason).toContain('write and edit tools');
+    expect(checkScaffolderCommand('echo hi > notes.md', options).allowed).toBe(false);
+    expect(checkScaffolderCommand('cat a.txt `whoami`', options).allowed).toBe(false);
+    expect(checkScaffolderCommand('echo $(rm -rf /)', options).allowed).toBe(false);
+  });
+
+  it('PROTECTED INVARIANT P-2: blocks graded artifacts named in mutating commands', () => {
+    for (const command of [
+      'rm sdd.json',
+      'cp sdd.json backup.json',
+      'node -e "fs.writeFileSync(\'sdd.json\',\'{}\')"',
+      'cat a.txt && rm rsdd.json',
+    ]) {
+      const check = checkScaffolderCommand(command, options);
+      expect(check.allowed, `should block: ${command}`).toBe(false);
+      expect(check.reason).toContain('P-2');
+    }
+  });
+
+  it('blocks mutating commands that target paths outside the workspace', () => {
+    expect(checkScaffolderCommand(`npx tsc --outDir ${path.resolve('/elsewhere')}`, options).allowed).toBe(false);
+    expect(checkScaffolderCommand('cp x.txt ~/notes', options).allowed).toBe(false);
+  });
+
+  it.runIf(process.platform === 'win32')(
+    'resolves Git Bash path forms before judging the workspace boundary',
+    () => {
+      expect(checkScaffolderCommand('cp x.txt /c/Windows/x.txt', options).allowed).toBe(false);
+      // Same file as <root>/out.txt, spelled the way Git Bash would.
+      const drive = root.split(path.sep)[0]; // e.g. "C:"
+      const driveForm = `/${drive[0].toLowerCase()}/workspace/project/out.txt`;
+      expect(checkScaffolderCommand(`cp x.txt ${driveForm}`, options).allowed).toBe(true);
+    },
+  );
+
+  it('allows absolute paths inside the workspace', () => {
+    expect(checkScaffolderCommand(`npx tsc --outDir ${path.join(root, 'dist')}`, options).allowed).toBe(true);
+  });
+
+  it('allows the empty command', () => {
+    expect(checkScaffolderCommand('   ', options).allowed).toBe(true);
   });
 });

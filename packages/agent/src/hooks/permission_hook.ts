@@ -1,11 +1,21 @@
 import path from 'path';
-import { PathPolicyEvaluator, classifyCommand, isPathWithin } from '@deepdive/policy';
+import {
+  PathPolicyEvaluator,
+  checkScaffolderCommand,
+  classifyCommand,
+  isPathWithin,
+} from '@deepdive/policy';
 import { ToolCallHookContext, ToolCallHookResult } from '../sdk/pi_contract.js';
 
 export interface PermissionHookOptions {
   role: 'scaffolder' | 'verifier' | 'grader';
   pathEvaluator?: PathPolicyEvaluator;
   gradedArtifactPaths?: string[];
+  /**
+   * Workspace root for scaffolder bash commands. Required for the bash gate;
+   * omitted only by tests that never issue a bash call.
+   */
+  workspaceRoot?: string;
 }
 
 /**
@@ -95,6 +105,26 @@ export function createPermissionHook(options: PermissionHookOptions) {
                 reason: check.reason ?? `Write access denied for path: ${targetPath}`,
               };
             }
+          }
+        }
+
+        // P-2 and the workspace boundary must hold on the bash route too: a
+        // model told "no" by the write tool reaches for `echo … > sdd.json`,
+        // which no check on tool arguments ever sees.
+        if (toolName === 'bash') {
+          if (!options.workspaceRoot) {
+            return {
+              block: true,
+              reason: 'Scaffolder bash commands cannot be verified: no workspace root configured',
+            };
+          }
+          const commandStr = (args.command as string) ?? '';
+          const check = checkScaffolderCommand(commandStr, {
+            workspaceRoot: options.workspaceRoot,
+            gradedArtifacts: options.gradedArtifactPaths ?? [],
+          });
+          if (!check.allowed) {
+            return { block: true, reason: check.reason };
           }
         }
       }

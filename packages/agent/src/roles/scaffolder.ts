@@ -11,8 +11,14 @@ export function buildScaffolderSessionOptions(
   pathEvaluator: PathPolicyEvaluator,
   gradedArtifactPaths: string[] = ['sdd.json', 'rsdd.json', 'cdd.json'],
   approval?: ApprovalOptions,
+  workspaceRoot?: string,
 ): RoleSessionOptions {
-  const policy = createPermissionHook({ role: 'scaffolder', pathEvaluator, gradedArtifactPaths });
+  const policy = createPermissionHook({
+    role: 'scaffolder',
+    pathEvaluator,
+    gradedArtifactPaths,
+    workspaceRoot,
+  });
   return {
     role: 'scaffolder',
     tools: [...SCAFFOLDER_TOOLS],
@@ -28,7 +34,7 @@ export function createScaffolderSession(
   approval?: ApprovalOptions,
 ): Promise<AgentSession> {
   return createRoleSession({
-    ...buildScaffolderSessionOptions(pathEvaluator, gradedArtifactPaths, approval),
+    ...buildScaffolderSessionOptions(pathEvaluator, gradedArtifactPaths, approval, cwd),
     model,
     cwd,
   });

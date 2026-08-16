@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 /**
  * Which paths a role may read and write.
  *
@@ -13,6 +14,47 @@ export interface PathPolicy {
   blockedPaths: string[];
 }
 
+export interface PathNormalizerOptions {
+  /** Override for tests; defaults to the real platform. */
+  platform?: NodeJS.Platform;
+  /** Override for tests; defaults to os.tmpdir(). */
+  tmpDir?: string;
+}
+
+/**
+ * Rewrites MSYS/Git Bash-style absolute POSIX paths into Windows paths.
+ *
+ * On win32, pi's bash tool is a POSIX shell, so models routinely emit
+ * `/tmp/…` or `/c/Users/…` paths. `path.resolve('/tmp/x')` answers those
+ * against the current drive (`C:\tmp\x`) — a directory that is not the one
+ * the shell would have used. A policy that cannot see the real target both
+ * blocks writes inside its own workspace (pushing the model to route around
+ * the write tool via bash) and judges containment against the wrong root.
+ *
+ * `/tmp` and `/var/tmp` map to the user's temp directory, which is what an
+ * MSYS environment maps them to; `/c/…` is the Git Bash drive form. Anything
+ * else is returned untouched for `path.resolve` to handle. On non-win32
+ * platforms POSIX paths are native and the input is returned unchanged.
+ */
+export function normalizePosixPathForWindows(
+  rawPath: string,
+  options: PathNormalizerOptions = {},
+): string {
+  if ((options.platform ?? process.platform) !== 'win32') return rawPath;
+
+  const tmpForm = /^\/(?:var\/)?tmp\/(.*)$/.exec(rawPath);
+  if (tmpForm) {
+    return path.join(options.tmpDir ?? os.tmpdir(), ...tmpForm[1].split('/'));
+  }
+
+  const driveForm = /^\/([a-zA-Z])\/(.+)$/.exec(rawPath);
+  if (driveForm) {
+    return `${driveForm[1].toUpperCase()}:\\${driveForm[2].replace(/\//g, '\\')}`;
+  }
+
+  return rawPath;
+}
+
 /**
  * Whether `child` is `parent` itself or lives underneath it.
  *
@@ -20,11 +62,11 @@ export interface PathPolicy {
  * current directory rather than compared as text. Substring matching — the
  * obvious shortcut — is wrong in both directions: `/repo/graded-old` contains
  * `/repo/graded` without being inside it, and a relative `charter.json` does
- * not contain the absolute graded path even when it resolves into it.
+ * not contain the absolute graded path even when it resolves into one.
  */
 export function isPathWithin(parent: string, child: string): boolean {
-  const from = path.resolve(parent);
-  const to = path.resolve(child);
+  const from = path.resolve(normalizePosixPathForWindows(parent));
+  const to = path.resolve(normalizePosixPathForWindows(child));
   if (from === to) return true;
   const relative = path.relative(from, to);
   return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
@@ -35,7 +77,7 @@ export class PathPolicyEvaluator {
 
   /** Canonicalizes path, resolving relative components and symlinks if existing */
   public canonicalize(targetPath: string): string {
-    const resolved = path.resolve(targetPath);
+    const resolved = path.resolve(normalizePosixPathForWindows(targetPath));
     try {
       if (fs.existsSync(resolved)) {
         return fs.realpathSync(resolved);
