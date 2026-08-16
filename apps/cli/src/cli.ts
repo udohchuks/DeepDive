@@ -28,7 +28,7 @@ import {
 } from './hints.js';
 import { HintLevel, QuizItem } from '@deepdive/core';
 import { computeStats, renderStudio } from './studio.js';
-import { buildRoleModel, PiBackedKeyStore, runScaffold, runVerify } from './agent_commands.js';
+import { buildRoleModel, PiBackedKeyStore, runScaffold, runVerify, runInteractiveAgent } from './agent_commands.js';
 import { createTerminalApprover } from './approver.js';
 import { SessionStore } from './session_store.js';
 import { ApprovalOptions, isPermissionMode, PermissionMode } from '@deepdive/agent';
@@ -76,16 +76,18 @@ Usage:
       Show every round recorded for this project, oldest first.
       Grades, scaffold runs and verify runs all appear, tagged by role.
 
-  deepdive scaffold [--auto|--approve] <workspace> <instruction>
+  deepdive scaffold [--auto|--approve] [--interactive] <workspace> <instruction>
       Run the Scaffolder against a workspace (write/edit/bash, path-scoped).
       Cannot write graded artifacts, in any mode.
 
-  deepdive verify [--auto|--approve] <workspace> <instruction>
+  deepdive verify [--auto|--approve] [--interactive] <workspace> <instruction>
       Run the Verifier against a workspace (read-only).
 
 Permission modes:
   --approve   (default) ask before each mutating command; reads run freely
   --auto      policy decides, nothing is asked
+  --interactive  run the role in pi's interactive TUI (needs a terminal);
+              the policy gate still blocks, shown inline; no y/N prompts
 
   Policy always applies. Approval can only narrow what policy permits, so no
   answer at a prompt can authorise a write into a graded artifact.
@@ -125,6 +127,26 @@ export function parsePermissionMode(
   }
 
   return { mode: mode ?? 'approve', rest };
+}
+
+/**
+ * Extracts the `--interactive` flag.
+ *
+ * Interactive runs open pi's TUI, which needs a real terminal; the TTY check
+ * happens at use, so this stays a pure parser.
+ */
+export function parseInteractiveFlag(
+  argv: string[],
+): { interactive: boolean; rest: string[] } {
+  const rest: string[] = [];
+  let interactive = false;
+
+  for (const arg of argv) {
+    if (arg === '--interactive' || arg === '-i') interactive = true;
+    else rest.push(arg);
+  }
+
+  return { interactive, rest };
 }
 
 /**
@@ -738,11 +760,14 @@ async function runCommand(
     }
 
     if (command === 'scaffold' || command === 'verify') {
-      const { mode, rest: positional } = parsePermissionMode(rest);
+      const { mode, rest: withoutMode } = parsePermissionMode(rest);
+      const { interactive, rest: positional } = parseInteractiveFlag(withoutMode);
       const [workspace, ...instructionParts] = positional;
       const instruction = instructionParts.join(' ');
-      if (!workspace || !instruction) {
-        io.err(`Usage: deepdive ${command} [--auto|--approve] <workspace> <instruction>`);
+      if (!workspace || (!instruction && !interactive)) {
+        io.err(
+          `Usage: deepdive ${command} [--auto|--approve] [--interactive] <workspace> <instruction>`,
+        );
         return 1;
       }
 
@@ -758,11 +783,25 @@ async function runCommand(
       }
 
       const approval: ApprovalOptions = { mode, approver: createTerminalApprover() };
-      io.out(`permission mode: ${mode}`);
+
+      // The TUI renders straight to the terminal; a pipe is not one. Checked
+      // before the model is built so a scripted run fails for free.
+      if (interactive && !(process.stdin.isTTY && process.stdout.isTTY)) {
+        io.err('--interactive needs a real terminal (stdin and stdout must be TTYs)');
+        return 1;
+      }
+
+      io.out(`permission mode: ${interactive ? 'interactive (policy gate, pi TUI)' : mode}`);
 
       const model = await buildRoleModel();
-      const result =
-        command === 'scaffold'
+
+      // Interactive: pi's TUI owns the terminal, so the readline approver
+      // cannot run — the policy gate alone decides, and denied calls are shown
+      // inline by the TUI. Everything else (workspace check, third-party-code
+      // prompt, round recording) is identical to the headless path.
+      const result = interactive
+        ? (await runInteractiveAgent(command, workspace, instruction, model))
+        : command === 'scaffold'
           ? await runScaffold(workspace, instruction, model, approval)
           : await runVerify(workspace, instruction, model, approval);
 
@@ -781,7 +820,7 @@ async function runCommand(
         artifactPayload: {
           workspace,
           instruction,
-          permissionMode: mode,
+          permissionMode: interactive ? 'interactive' : mode,
           tools: result.tools,
           summary: result.finalText,
         },

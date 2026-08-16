@@ -4,6 +4,9 @@ import {
   createScaffolderSession,
   createVerifierSession,
   resolveProviderCredential,
+  buildScaffolderSessionOptions,
+  buildVerifierSessionOptions,
+  launchInteractiveRoleSession,
   ApprovalOptions,
   RoleModel,
 } from '@deepdive/agent';
@@ -188,4 +191,37 @@ export async function runVerify(
   await session.prompt(instruction);
 
   return buildRunResult('verifier', session);
+}
+
+/**
+ * Runs a role inside pi's interactive TUI.
+ *
+ * The TUI replaces the readline approver (it owns the terminal), so the policy
+ * gate is the enforcement: permitted calls stream live, denied calls are shown
+ * inline with the policy reason. Requires a TTY — checked by the caller.
+ */
+export async function runInteractiveAgent(
+  command: 'scaffold' | 'verify',
+  workspace: string,
+  instruction: string,
+  model: RoleModel,
+): Promise<AgentRunResult> {
+  const role: AgentRoleId = command === 'scaffold' ? 'scaffolder' : 'verifier';
+  const roleOptions =
+    role === 'scaffolder'
+      ? buildScaffolderSessionOptions(
+          workspacePolicy(workspace, DEFAULT_GRADED_ARTIFACTS),
+          DEFAULT_GRADED_ARTIFACTS,
+          undefined,
+          path.resolve(workspace),
+        )
+      : buildVerifierSessionOptions();
+
+  const { session } = await launchInteractiveRoleSession({
+    roleOptions,
+    model,
+    instruction,
+  });
+
+  return buildRunResult(role, session);
 }

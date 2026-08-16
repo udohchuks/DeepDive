@@ -54,6 +54,8 @@ deepdive verify ./workspace "Do the tests cover the modules in sdd.json? Report 
 deepdive history
 ```
 
+Add `--interactive` to `scaffold` or `verify` to run the same role inside pi's interactive TUI — streaming tool calls, editable follow-ups, `/new` and `/resume` — with the role's tool allowlist, the policy gate (P-2, workspace boundary) and the pinned model enforced on every session the TUI can create. The TUI replaces the `y/N` prompts: the policy gate decides, and denied calls are shown inline with the reason. It needs a real terminal; after you exit, the run is recorded like any other round.
+
 Each `grade` is saved to `<project>/.deepdive/deepdive.db`. Rounds are append-only, so a rejected attempt stays in the record next to the approved one — that history is the point.
 
 ### The studio

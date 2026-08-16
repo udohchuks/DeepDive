@@ -3,6 +3,7 @@ export const PACKAGE_NAME = '@deepdive/agent';
 export * from './sdk/pi_contract.js';
 export * from './sdk/role_model.js';
 export * from './sdk/credential_resolver.js';
+export * from './sdk/interactive.js';
 export * from './hooks/permission_hook.js';
 export * from './hooks/approval.js';
 export * from './quarantine/finding_transformer.js';
